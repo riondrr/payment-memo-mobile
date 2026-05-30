@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f3eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="決済メモ">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <title>銀行・カード決済 月別管理</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #fbfaf7;
+      --ink: #24211c;
+      --muted: #746d63;
+      --line: #ded7cb;
+      --panel: #fffdf9;
+      --accent: #1d6f68;
+      --accent-soft: #dff0ed;
+      --warn: #9b5d22;
+      --rose: #b85454;
+      --shadow: 0 20px 50px rgba(70, 55, 34, .12);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 15% -10%, rgba(29, 111, 104, .13), transparent 32rem),
+        linear-gradient(180deg, #f7f3eb 0%, #fdfcf9 42%, #eef4f2 100%);
+      color: var(--ink);
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .app {
+      width: min(100%, 460px);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: max(18px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 4px 2px 16px;
+    }
+
+    .title-block {
+      min-width: 0;
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0;
+      margin: 0 0 4px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    .icon-button {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--panel);
+      color: var(--ink);
+      box-shadow: 0 8px 22px rgba(75, 59, 35, .12);
+      border: 1px solid rgba(98, 81, 50, .09);
+      font-size: 21px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .metric {
+      min-width: 0;
+      border: 1px solid var(--line);
+      background: rgba(255, 253, 249, .84);
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: 0 10px 24px rgba(65, 54, 38, .07);
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 21px;
+      line-height: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      margin: 0 -16px 12px;
+      padding: 10px 16px;
+      background: rgba(247, 243, 235, .88);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid rgba(173, 159, 136, .28);
+    }
+
+    .search {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      align-items: center;
+      height: 44px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 0 12px;
+      color: var(--muted);
+    }
+
+    .search input {
+      width: 100%;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--ink);
+      min-width: 0;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 10px 0 0;
+      scrollbar-width: none;
+    }
+
+    .tabs::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tab {
+      flex: 0 0 auto;
+      min-width: 92px;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fffaf1;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .tab[aria-selected="true"] {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+
+    .month-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 2px 12px;
+    }
+
+    .month-head h2 {
+      margin: 0;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+
+    .compact-actions {
+      display: flex;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+
+    .soft-button {
+      display: inline-grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: #0f5550;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .entry {
+      border: 1px solid var(--line);
+      background: rgba(255, 253, 249, .92);
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: 0 10px 28px rgba(72, 57, 37, .08);
+    }
+
+    .entry-main {
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .check {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid #b8ada0;
+      background: #fff;
+      color: white;
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .entry.done .check {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .entry-title {
+      min-width: 0;
+    }
+
+    .entry-title strong {
+      display: block;
+      font-size: 16px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .entry-title span {
+      display: inline-block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    .amount {
+      min-width: 84px;
+      max-width: 118px;
+      border: 1px solid #d9ede9;
+      border-radius: 999px;
+      background: #f2faf8;
+      padding: 5px 10px;
+      text-align: right;
+      color: var(--accent);
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+
+    .entry-fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 5px;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .field input,
+    .field textarea,
+    .field select {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid #d8d0c3;
+      background: #fff;
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 10px;
+      outline-color: var(--accent);
+    }
+
+    .field textarea {
+      min-height: 54px;
+      resize: vertical;
+    }
+
+    .empty {
+      border: 1px dashed #c8bdaa;
+      border-radius: 8px;
+      padding: 24px 14px;
+      color: var(--muted);
+      text-align: center;
+      background: rgba(255, 253, 249, .56);
+    }
+
+    .sheet {
+      position: fixed;
+      inset: auto 0 0;
+      z-index: 20;
+      transform: translateY(110%);
+      transition: transform .22s ease;
+      padding: 14px 16px max(18px, env(safe-area-inset-bottom));
+      background: #fffdf9;
+      border-radius: 18px 18px 0 0;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--line);
+    }
+
+    .sheet.open {
+      transform: translateY(0);
+    }
+
+    .sheet form {
+      width: min(100%, 440px);
+      margin: 0 auto;
+      display: grid;
+      gap: 12px;
+    }
+
+    .sheet-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .sheet h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .primary {
+      height: 44px;
+      border-radius: 8px;
+      background: var(--accent);
+      color: white;
+      font-weight: 800;
+    }
+
+    .danger {
+      height: 40px;
+      border-radius: 8px;
+      background: #f7e6e2;
+      color: var(--rose);
+      font-weight: 800;
+    }
+
+    .scrim {
+      position: fixed;
+      inset: 0;
+      z-index: 15;
+      background: rgba(33, 28, 20, .22);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s ease;
+    }
+
+    .scrim.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    @media (max-width: 360px) {
+      .entry-fields,
+      .summary {
+        grid-template-columns: 1fr;
+      }
+
+      .amount {
+        min-width: 68px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="title-block">
+        <p class="eyebrow">Monthly payments</p>
+        <h1>銀行・カード決済</h1>
+      </div>
+      <button class="icon-button" id="exportButton" type="button" title="JSONを書き出し" aria-label="JSONを書き出し">⇩</button>
+    </header>
+
+    <section class="summary" aria-label="集計">
+      <div class="metric">
+        <span>今月の入力額</span>
+        <strong id="totalAmount">¥0</strong>
+      </div>
+      <div class="metric">
+        <span>支払い済み</span>
+        <strong id="paidCount">0 / 0</strong>
+      </div>
+    </section>
+
+    <section class="toolbar">
+      <label class="search" for="searchInput">
+        <span>⌕</span>
+        <input id="searchInput" type="search" placeholder="検索">
+      </label>
+      <nav class="tabs" id="monthTabs" aria-label="月"></nav>
+    </section>
+
+    <section class="month-head">
+      <h2 id="monthTitle"></h2>
+      <div class="compact-actions">
+        <button class="soft-button" id="addMonthButton" type="button" title="月を追加" aria-label="月を追加">＋</button>
+        <button class="soft-button" id="addEntryButton" type="button" title="明細を追加" aria-label="明細を追加">✎</button>
+      </div>
+    </section>
+
+    <section class="list" id="entryList" aria-live="polite"></section>
+  </main>
+
+  <div class="scrim" id="scrim"></div>
+  <aside class="sheet" id="entrySheet" aria-hidden="true">
+    <form id="entryForm">
+      <div class="sheet-head">
+        <h2 id="sheetTitle">明細</h2>
+        <button class="icon-button" id="closeSheetButton" type="button" title="閉じる" aria-label="閉じる">×</button>
+      </div>
+      <div class="field">
+        <label for="methodInput">支払い手段</label>
+        <input id="methodInput" required>
+      </div>
+      <div class="field">
+        <label for="contentInput">内容</label>
+        <input id="contentInput">
+      </div>
+      <div class="field">
+        <label for="amountInput">金額</label>
+        <input id="amountInput" inputmode="numeric" placeholder="0">
+      </div>
+      <div class="field">
+        <label for="noteInput">備考</label>
+        <textarea id="noteInput"></textarea>
+      </div>
+      <button class="primary" type="submit">保存</button>
+      <button class="danger" id="deleteEntryButton" type="button">削除</button>
+    </form>
+  </aside>
+
+  <script>
+    const seed = {
+      activeMonth: "2026-05",
+      months: [
+        {
+          id: "2026-05",
+          label: "2026年5月",
+          items: [
+            { id: "sbi-rent", method: "住信SBIネット銀行", content: "家賃", amount: "", note: "", paid: false },
+            { id: "recruit-gas", method: "リクルートカード", content: "ガス代", amount: "", note: "", paid: false },
+            { id: "recruit-water", method: "リクルートカード", content: "水道", amount: "", note: "", paid: false },
+            { id: "paypay-bank", method: "PayPay銀行", content: "", amount: "", note: "", paid: false },
+            { id: "paypay-card", method: "PayPayカード", content: "普段使い", amount: "", note: "", paid: false },
+            { id: "orico-card", method: "オリコカード", content: "予備", amount: "", note: "", paid: false },
+            { id: "smbc", method: "SMBC", content: "", amount: "", note: "", paid: false },
+            { id: "olive-card", method: "Oliveカード", content: "SBI証券", amount: "", note: "", paid: false }
+          ]
+        }
+      ]
+    };
+
+    const storageKey = "notion-payment-notes-v1";
+    const state = loadState();
+    let editingId = null;
+
+    const tabs = document.getElementById("monthTabs");
+    const list = document.getElementById("entryList");
+    const monthTitle = document.getElementById("monthTitle");
+    const totalAmount = document.getElementById("totalAmount");
+    const paidCount = document.getElementById("paidCount");
+    const searchInput = document.getElementById("searchInput");
+    const sheet = document.getElementById("entrySheet");
+    const scrim = document.getElementById("scrim");
+    const form = document.getElementById("entryForm");
+    const deleteButton = document.getElementById("deleteEntryButton");
+    const sheetTitle = document.getElementById("sheetTitle");
+
+    document.getElementById("addEntryButton").addEventListener("click", () => openSheet());
+    document.getElementById("addMonthButton").addEventListener("click", addNextMonth);
+    document.getElementById("closeSheetButton").addEventListener("click", closeSheet);
+    document.getElementById("exportButton").addEventListener("click", exportJson);
+    scrim.addEventListener("click", closeSheet);
+    searchInput.addEventListener("input", render);
+    form.addEventListener("submit", saveEntry);
+    deleteButton.addEventListener("click", deleteEntry);
+
+    render();
+
+    if ("serviceWorker" in navigator && location.protocol !== "file:") {
+      navigator.serviceWorker.register("sw.js").catch(error => console.warn(error));
+    }
+
+    function loadState() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(storageKey));
+        if (saved && Array.isArray(saved.months)) return saved;
+      } catch (error) {
+        console.warn(error);
+      }
+      return structuredClone(seed);
+    }
+
+    function persist() {
+      localStorage.setItem(storageKey, JSON.stringify(state));
+    }
+
+    function currentMonth() {
+      return state.months.find(month => month.id === state.activeMonth) || state.months[0];
+    }
+
+    function render() {
+      renderTabs();
+      renderEntries();
+      renderSummary();
+    }
+
+    function renderTabs() {
+      tabs.innerHTML = "";
+      state.months.forEach(month => {
+        const button = document.createElement("button");
+        button.className = "tab";
+        button.type = "button";
+        button.textContent = month.label;
+        button.setAttribute("aria-selected", String(month.id === state.activeMonth));
+        button.addEventListener("click", () => {
+          state.activeMonth = month.id;
+          persist();
+          render();
+        });
+        tabs.appendChild(button);
+      });
+    }
+
+    function renderEntries() {
+      const month = currentMonth();
+      const query = searchInput.value.trim().toLowerCase();
+      const items = month.items.filter(item => {
+        const haystack = [item.method, item.content, item.note, item.amount].join(" ").toLowerCase();
+        return haystack.includes(query);
+      });
+
+      monthTitle.textContent = month.label;
+      list.innerHTML = "";
+
+      if (!items.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "該当する明細がありません";
+        list.appendChild(empty);
+        return;
+      }
+
+      items.forEach(item => {
+        const article = document.createElement("article");
+        article.className = `entry${item.paid ? " done" : ""}`;
+        article.innerHTML = `
+          <div class="entry-main">
+            <button class="check" type="button" title="支払い済み" aria-label="支払い済み">${item.paid ? "✓" : ""}</button>
+            <div class="entry-title">
+              <strong>${escapeHtml(item.method || "未設定")}</strong>
+              <span>${escapeHtml(item.content || "内容なし")}</span>
+            </div>
+            <button class="amount" type="button" title="編集" aria-label="編集">${formatAmount(item.amount)}</button>
+          </div>
+          <div class="entry-fields">
+            <div class="field">
+              <label>金額</label>
+              <input inputmode="numeric" value="${escapeAttr(item.amount)}" data-field="amount">
+            </div>
+            <div class="field">
+              <label>備考</label>
+              <input value="${escapeAttr(item.note)}" data-field="note">
+            </div>
+          </div>
+        `;
+
+        article.querySelector(".check").addEventListener("click", () => {
+          item.paid = !item.paid;
+          persist();
+          render();
+        });
+        article.querySelector(".amount").addEventListener("click", () => openSheet(item.id));
+        article.querySelectorAll("input").forEach(input => {
+          input.addEventListener("change", () => {
+            item[input.dataset.field] = input.value.trim();
+            persist();
+            renderSummary();
+            article.querySelector(".amount").textContent = formatAmount(item.amount);
+          });
+        });
+        article.querySelector(".entry-title").addEventListener("click", () => openSheet(item.id));
+        list.appendChild(article);
+      });
+    }
+
+    function renderSummary() {
+      const month = currentMonth();
+      const sum = month.items.reduce((acc, item) => acc + toNumber(item.amount), 0);
+      const paid = month.items.filter(item => item.paid).length;
+      totalAmount.textContent = formatAmount(sum);
+      paidCount.textContent = `${paid} / ${month.items.length}`;
+    }
+
+    function addNextMonth() {
+      const base = state.months[state.months.length - 1];
+      const [year, month] = base.id.split("-").map(Number);
+      const nextDate = new Date(year, month, 1);
+      const id = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
+      const label = `${nextDate.getFullYear()}年${nextDate.getMonth() + 1}月`;
+      if (state.months.some(existing => existing.id === id)) {
+        state.activeMonth = id;
+        render();
+        return;
+      }
+      state.months.push({
+        id,
+        label,
+        items: base.items.map(item => ({
+          id: crypto.randomUUID(),
+          method: item.method,
+          content: item.content,
+          amount: "",
+          note: "",
+          paid: false
+        }))
+      });
+      state.activeMonth = id;
+      persist();
+      render();
+    }
+
+    function openSheet(id) {
+      const item = id ? currentMonth().items.find(entry => entry.id === id) : null;
+      editingId = id || null;
+      sheetTitle.textContent = item ? "明細を編集" : "明細を追加";
+      deleteButton.style.display = item ? "block" : "none";
+      document.getElementById("methodInput").value = item?.method || "";
+      document.getElementById("contentInput").value = item?.content || "";
+      document.getElementById("amountInput").value = item?.amount || "";
+      document.getElementById("noteInput").value = item?.note || "";
+      sheet.classList.add("open");
+      scrim.classList.add("open");
+      sheet.setAttribute("aria-hidden", "false");
+      document.getElementById("methodInput").focus();
+    }
+
+    function closeSheet() {
+      sheet.classList.remove("open");
+      scrim.classList.remove("open");
+      sheet.setAttribute("aria-hidden", "true");
+      form.reset();
+      editingId = null;
+    }
+
+    function saveEntry(event) {
+      event.preventDefault();
+      const month = currentMonth();
+      const payload = {
+        method: document.getElementById("methodInput").value.trim(),
+        content: document.getElementById("contentInput").value.trim(),
+        amount: document.getElementById("amountInput").value.trim(),
+        note: document.getElementById("noteInput").value.trim()
+      };
+
+      if (editingId) {
+        const item = month.items.find(entry => entry.id === editingId);
+        Object.assign(item, payload);
+      } else {
+        month.items.push({ id: crypto.randomUUID(), paid: false, ...payload });
+      }
+      persist();
+      closeSheet();
+      render();
+    }
+
+    function deleteEntry() {
+      if (!editingId) return;
+      const month = currentMonth();
+      month.items = month.items.filter(item => item.id !== editingId);
+      persist();
+      closeSheet();
+      render();
+    }
+
+    function exportJson() {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "payment-notes.json";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function toNumber(value) {
+      return Number(String(value).replace(/[^\d.-]/g, "")) || 0;
+    }
+
+    function formatAmount(value) {
+      const number = toNumber(value);
+      if (!number) return "¥0";
+      return new Intl.NumberFormat("ja-JP", {
+        style: "currency",
+        currency: "JPY",
+        maximumFractionDigits: 0
+      }).format(number);
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;"
+      }[char]));
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replace(/`/g, "&#96;");
+    }
+  </script>
+</body>
+</html>
