@@ -337,6 +337,28 @@
       resize: vertical;
     }
 
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .form-error {
+      display: none;
+      margin: 0;
+      border: 1px solid #e6b7ad;
+      border-radius: 8px;
+      background: #fff1ed;
+      color: #963e31;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .form-error.show {
+      display: block;
+    }
+
     .empty {
       border: 1px dashed #c8bdaa;
       border-radius: 8px;
@@ -382,6 +404,11 @@
       font-size: 18px;
     }
 
+    #settingsSheet {
+      display: grid;
+      gap: 12px;
+    }
+
     .primary {
       height: 44px;
       border-radius: 8px;
@@ -396,6 +423,49 @@
       background: #f7e6e2;
       color: var(--rose);
       font-weight: 800;
+    }
+
+    .secondary {
+      height: 44px;
+      border: 1px solid #cfc5b7;
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      font-weight: 800;
+    }
+
+    .status {
+      display: grid;
+      gap: 5px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+    }
+
+    .status strong {
+      font-size: 14px;
+    }
+
+    .status span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .ad-slot {
+      position: sticky;
+      bottom: 0;
+      display: none;
+      min-height: 50px;
+      margin: 16px -16px calc(-1 * max(24px, env(safe-area-inset-bottom)));
+      padding-bottom: env(safe-area-inset-bottom);
+      background: #fff;
+      border-top: 1px solid var(--line);
+    }
+
+    .ad-slot.ready {
+      display: block;
     }
 
     .scrim {
@@ -432,7 +502,7 @@
         <p class="eyebrow">Monthly payments</p>
         <h1>銀行・カード決済</h1>
       </div>
-      <button class="icon-button" id="exportButton" type="button" title="JSONを書き出し" aria-label="JSONを書き出し">⇩</button>
+      <button class="icon-button" id="settingsButton" type="button" title="設定" aria-label="設定">⚙</button>
     </header>
 
     <section class="summary" aria-label="集計">
@@ -463,8 +533,10 @@
     </section>
 
     <section class="list" id="entryList" aria-live="polite"></section>
+    <aside class="ad-slot" id="adSlot" aria-label="広告"></aside>
   </main>
 
+  <input id="importInput" type="file" accept="application/json" hidden>
   <div class="scrim" id="scrim"></div>
   <aside class="sheet" id="entrySheet" aria-hidden="true">
     <form id="entryForm">
@@ -492,7 +564,40 @@
       <button class="danger" id="deleteEntryButton" type="button">削除</button>
     </form>
   </aside>
+  <aside class="sheet" id="monthSheet" aria-hidden="true">
+    <form id="monthForm">
+      <div class="sheet-head">
+        <h2>年月を追加</h2>
+        <button class="icon-button" id="closeMonthSheetButton" type="button" title="閉じる" aria-label="年月追加を閉じる">×</button>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="yearInput">年</label>
+          <select id="yearInput"></select>
+        </div>
+        <div class="field">
+          <label for="monthInput">月</label>
+          <select id="monthInput"></select>
+        </div>
+      </div>
+      <p class="form-error" id="monthError" role="alert"></p>
+      <button class="primary" type="submit">追加</button>
+    </form>
+  </aside>
+  <aside class="sheet" id="settingsSheet" aria-hidden="true">
+    <div class="sheet-head">
+      <h2>設定</h2>
+      <button class="icon-button" id="closeSettingsSheetButton" type="button" title="閉じる" aria-label="設定を閉じる">×</button>
+    </div>
+    <div class="status">
+      <strong>クラウド同期</strong>
+      <span id="cloudSyncStatus">未接続</span>
+    </div>
+    <button class="secondary" id="exportButton" type="button">バックアップを書き出す</button>
+    <button class="secondary" id="importButton" type="button">バックアップから復元する</button>
+  </aside>
 
+  <script src="app-config.js"></script>
   <script>
     const seed = {
       activeMonth: "2026-05",
@@ -525,21 +630,35 @@
     const paidCount = document.getElementById("paidCount");
     const searchInput = document.getElementById("searchInput");
     const sheet = document.getElementById("entrySheet");
+    const monthSheet = document.getElementById("monthSheet");
+    const settingsSheet = document.getElementById("settingsSheet");
     const scrim = document.getElementById("scrim");
     const form = document.getElementById("entryForm");
+    const monthForm = document.getElementById("monthForm");
     const deleteButton = document.getElementById("deleteEntryButton");
     const sheetTitle = document.getElementById("sheetTitle");
+    const yearInput = document.getElementById("yearInput");
+    const monthInput = document.getElementById("monthInput");
+    const monthError = document.getElementById("monthError");
+    const importInput = document.getElementById("importInput");
 
     document.getElementById("addEntryButton").addEventListener("click", () => openSheet());
-    document.getElementById("addMonthButton").addEventListener("click", addNextMonth);
+    document.getElementById("addMonthButton").addEventListener("click", openMonthSheet);
+    document.getElementById("settingsButton").addEventListener("click", openSettingsSheet);
     document.getElementById("closeSheetButton").addEventListener("click", closeSheet);
+    document.getElementById("closeMonthSheetButton").addEventListener("click", closeMonthSheet);
+    document.getElementById("closeSettingsSheetButton").addEventListener("click", closeSettingsSheet);
     document.getElementById("exportButton").addEventListener("click", exportJson);
-    scrim.addEventListener("click", closeSheet);
+    document.getElementById("importButton").addEventListener("click", () => importInput.click());
+    importInput.addEventListener("change", importJson);
+    scrim.addEventListener("click", closeOpenSheet);
     searchInput.addEventListener("input", render);
     form.addEventListener("submit", saveEntry);
+    monthForm.addEventListener("submit", addSelectedMonth);
     deleteButton.addEventListener("click", deleteEntry);
 
     render();
+    renderIntegrationStatus();
 
     if ("serviceWorker" in navigator && location.protocol !== "file:") {
       navigator.serviceWorker.register("sw.js").catch(error => console.warn(error));
@@ -656,17 +775,56 @@
       paidCount.textContent = `${paid} / ${month.items.length}`;
     }
 
-    function addNextMonth() {
-      const base = state.months[state.months.length - 1];
-      const [year, month] = base.id.split("-").map(Number);
-      const nextDate = new Date(year, month, 1);
-      const id = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
-      const label = `${nextDate.getFullYear()}年${nextDate.getMonth() + 1}月`;
-      if (state.months.some(existing => existing.id === id)) {
-        state.activeMonth = id;
-        render();
+    function openMonthSheet() {
+      const currentYear = new Date().getFullYear();
+      const [activeYear, activeMonth] = currentMonth().id.split("-").map(Number);
+      yearInput.innerHTML = "";
+      monthInput.innerHTML = "";
+      for (let year = currentYear - 3; year <= currentYear + 7; year += 1) {
+        yearInput.add(new Option(`${year}年`, String(year), false, year === activeYear));
+      }
+      for (let month = 1; month <= 12; month += 1) {
+        monthInput.add(new Option(`${month}月`, String(month), false, month === activeMonth));
+      }
+      monthError.textContent = "";
+      monthError.classList.remove("show");
+      monthSheet.classList.add("open");
+      scrim.classList.add("open");
+      monthSheet.setAttribute("aria-hidden", "false");
+    }
+
+    function closeMonthSheet() {
+      monthSheet.classList.remove("open");
+      scrim.classList.remove("open");
+      monthSheet.setAttribute("aria-hidden", "true");
+      monthError.textContent = "";
+      monthError.classList.remove("show");
+    }
+
+    function closeOpenSheet() {
+      if (monthSheet.classList.contains("open")) {
+        closeMonthSheet();
         return;
       }
+      if (settingsSheet.classList.contains("open")) {
+        closeSettingsSheet();
+        return;
+      }
+      closeSheet();
+    }
+
+    function addSelectedMonth(event) {
+      event.preventDefault();
+      const year = Number(yearInput.value);
+      const month = Number(monthInput.value);
+      const id = `${year}-${String(month).padStart(2, "0")}`;
+      const label = `${year}年${month}月`;
+      if (state.months.some(existing => existing.id === id)) {
+        monthError.textContent = `${label}は既に追加されています。`;
+        monthError.classList.add("show");
+        return;
+      }
+      const base = currentMonth();
       state.months.push({
         id,
         label,
@@ -679,8 +837,10 @@
           paid: false
         }))
       });
+      state.months.sort((a, b) => a.id.localeCompare(b.id));
       state.activeMonth = id;
       persist();
+      closeMonthSheet();
       render();
     }
 
@@ -697,6 +857,18 @@
       scrim.classList.add("open");
       sheet.setAttribute("aria-hidden", "false");
       document.getElementById("methodInput").focus();
+    }
+
+    function openSettingsSheet() {
+      settingsSheet.classList.add("open");
+      scrim.classList.add("open");
+      settingsSheet.setAttribute("aria-hidden", "false");
+    }
+
+    function closeSettingsSheet() {
+      settingsSheet.classList.remove("open");
+      scrim.classList.remove("open");
+      settingsSheet.setAttribute("aria-hidden", "true");
     }
 
     function closeSheet() {
@@ -745,6 +917,36 @@
       anchor.download = "payment-notes.json";
       anchor.click();
       URL.revokeObjectURL(url);
+    }
+
+    async function importJson(event) {
+      const [file] = event.target.files;
+      if (!file) return;
+      try {
+        const imported = JSON.parse(await file.text());
+        if (!imported || !Array.isArray(imported.months) || !imported.months.length) {
+          throw new Error("Invalid backup");
+        }
+        state.months = imported.months;
+        state.activeMonth = imported.activeMonth || imported.months[0].id;
+        persist();
+        closeSettingsSheet();
+        render();
+      } catch (error) {
+        alert("バックアップファイルを読み込めませんでした。");
+      } finally {
+        event.target.value = "";
+      }
+    }
+
+    function renderIntegrationStatus() {
+      const config = window.APP_CONFIG || {};
+      document.getElementById("cloudSyncStatus").textContent = config.cloudSyncEnabled
+        ? "接続済み"
+        : "接続設定が必要です";
+      if (config.webAdsEnabled) {
+        document.getElementById("adSlot").classList.add("ready");
+      }
     }
 
     function toNumber(value) {
