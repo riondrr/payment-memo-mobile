@@ -453,6 +453,31 @@
       line-height: 1.45;
     }
 
+    .sync-panel {
+      display: grid;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+    }
+
+    .sync-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .sync-actions .secondary {
+      height: 40px;
+    }
+
+    .primary:disabled,
+    .secondary:disabled {
+      cursor: not-allowed;
+      opacity: .55;
+    }
+
     .ad-slot {
       position: sticky;
       bottom: 0;
@@ -593,10 +618,22 @@
       <strong>クラウド同期</strong>
       <span id="cloudSyncStatus">未接続</span>
     </div>
+    <div class="sync-panel">
+      <div class="field">
+        <label for="emailInput">メールアドレス</label>
+        <input id="emailInput" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com">
+      </div>
+      <button class="primary" id="signInButton" type="button">メールリンクでログイン</button>
+      <div class="sync-actions">
+        <button class="secondary" id="syncNowButton" type="button">今すぐ同期</button>
+        <button class="secondary" id="signOutButton" type="button">ログアウト</button>
+      </div>
+    </div>
     <button class="secondary" id="exportButton" type="button">バックアップを書き出す</button>
     <button class="secondary" id="importButton" type="button">バックアップから復元する</button>
   </aside>
 
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="app-config.js"></script>
   <script>
     const seed = {
@@ -620,8 +657,13 @@
     };
 
     const storageKey = "notion-payment-notes-v1";
+    const config = window.APP_CONFIG || {};
+    const syncTable = config.supabaseStateTable || "user_states";
     const state = loadState();
     let editingId = null;
+    let supabaseClient = null;
+    let currentSession = null;
+    let syncTimer = null;
 
     const tabs = document.getElementById("monthTabs");
     const list = document.getElementById("entryList");
@@ -641,6 +683,10 @@
     const monthInput = document.getElementById("monthInput");
     const monthError = document.getElementById("monthError");
     const importInput = document.getElementById("importInput");
+    const emailInput = document.getElementById("emailInput");
+    const signInButton = document.getElementById("signInButton");
+    const signOutButton = document.getElementById("signOutButton");
+    const syncNowButton = document.getElementById("syncNowButton");
 
     document.getElementById("addEntryButton").addEventListener("click", () => openSheet());
     document.getElementById("addMonthButton").addEventListener("click", openMonthSheet);
@@ -656,8 +702,12 @@
     form.addEventListener("submit", saveEntry);
     monthForm.addEventListener("submit", addSelectedMonth);
     deleteButton.addEventListener("click", deleteEntry);
+    signInButton.addEventListener("click", sendMagicLink);
+    signOutButton.addEventListener("click", signOut);
+    syncNowButton.addEventListener("click", () => syncState());
 
     render();
+    setupCloudSync();
     renderIntegrationStatus();
 
     if ("serviceWorker" in navigator && location.protocol !== "file:") {
@@ -667,14 +717,37 @@
     function loadState() {
       try {
         const saved = JSON.parse(localStorage.getItem(storageKey));
-        if (saved && Array.isArray(saved.months)) return saved;
+        if (saved && Array.isArray(saved.months)) return normalizeState(saved);
       } catch (error) {
         console.warn(error);
       }
-      return structuredClone(seed);
+      return normalizeState(structuredClone(seed));
     }
 
-    function persist() {
+    function persist(options = {}) {
+      if (!options.keepUpdatedAt) {
+        state.updatedAt = new Date().toISOString();
+      }
+      localStorage.setItem(storageKey, JSON.stringify(state));
+      if (options.sync !== false) {
+        scheduleCloudSync();
+      }
+    }
+
+    function normalizeState(value) {
+      value.activeMonth = value.activeMonth || value.months?.[0]?.id || seed.activeMonth;
+      value.months = Array.isArray(value.months) && value.months.length
+        ? value.months
+        : structuredClone(seed.months);
+      value.updatedAt = value.updatedAt || new Date().toISOString();
+      return value;
+    }
+
+    function replaceState(nextState, updatedAt) {
+      const normalized = normalizeState(structuredClone(nextState));
+      normalized.updatedAt = updatedAt || normalized.updatedAt;
+      Object.keys(state).forEach(key => delete state[key]);
+      Object.assign(state, normalized);
       localStorage.setItem(storageKey, JSON.stringify(state));
     }
 
@@ -939,14 +1012,198 @@
       }
     }
 
-    function renderIntegrationStatus() {
-      const config = window.APP_CONFIG || {};
-      document.getElementById("cloudSyncStatus").textContent = config.cloudSyncEnabled
-        ? "接続済み"
-        : "接続設定が必要です";
+    async function setupCloudSync() {
+      if (config.ownerEmail && !emailInput.value) {
+        emailInput.value = config.ownerEmail;
+      }
+
+      if (!isCloudSyncConfigured()) {
+        renderIntegrationStatus();
+        return;
+      }
+
+      if (!window.supabase?.createClient) {
+        renderIntegrationStatus("Supabaseライブラリを読み込めませんでした。");
+        return;
+      }
+
+      supabaseClient = window.supabase.createClient(
+        config.supabaseUrl,
+        config.supabasePublishableKey,
+        {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true
+          }
+        }
+      );
+
+      supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+        currentSession = session;
+        if (session?.user?.email) {
+          emailInput.value = session.user.email;
+          await syncState();
+        }
+        renderIntegrationStatus();
+      });
+
+      try {
+        const { data, error } = await supabaseClient.auth.getSession();
+        if (error) throw error;
+        currentSession = data.session;
+        if (currentSession?.user?.email) {
+          emailInput.value = currentSession.user.email;
+          await syncState();
+        }
+      } catch (error) {
+        handleSyncError(error);
+      }
+    }
+
+    function isCloudSyncConfigured() {
+      return Boolean(
+        config.cloudSyncEnabled &&
+        config.supabaseUrl &&
+        config.supabasePublishableKey
+      );
+    }
+
+    async function sendMagicLink() {
+      if (!isCloudSyncConfigured() || !supabaseClient) return;
+
+      const email = emailInput.value.trim();
+      if (!email) {
+        renderIntegrationStatus("メールアドレスを入力してください。");
+        return;
+      }
+
+      if (config.ownerEmail && email.toLowerCase() !== config.ownerEmail.toLowerCase()) {
+        renderIntegrationStatus("このアプリは設定済みのメールアドレス専用です。");
+        return;
+      }
+
+      try {
+        renderIntegrationStatus("ログインリンクを送信中...");
+        const { error } = await supabaseClient.auth.signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo: config.supabaseRedirectUrl || `${location.origin}${location.pathname}`
+          }
+        });
+        if (error) throw error;
+        renderIntegrationStatus("ログイン用メールを送信しました。リンクを開いてください。");
+      } catch (error) {
+        handleSyncError(error);
+      }
+    }
+
+    async function signOut() {
+      if (!supabaseClient) return;
+      try {
+        const { error } = await supabaseClient.auth.signOut();
+        if (error) throw error;
+        currentSession = null;
+        renderIntegrationStatus("ログアウトしました。");
+      } catch (error) {
+        handleSyncError(error);
+      }
+    }
+
+    function scheduleCloudSync() {
+      if (!currentSession || !supabaseClient) return;
+      clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => {
+        pushStateToCloud().catch(handleSyncError);
+      }, 900);
+    }
+
+    async function syncState(options = {}) {
+      if (!currentSession || !supabaseClient) {
+        renderIntegrationStatus();
+        return;
+      }
+
+      try {
+        renderIntegrationStatus("同期中...");
+        const { data, error } = await supabaseClient
+          .from(syncTable)
+          .select("state, updated_at")
+          .eq("user_id", currentSession.user.id)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        const localUpdatedAt = new Date(state.updatedAt || 0).getTime();
+        const remoteUpdatedAt = new Date(data?.updated_at || 0).getTime();
+
+        if (data?.state && !options.forcePush && remoteUpdatedAt > localUpdatedAt) {
+          replaceState(data.state, data.updated_at);
+          render();
+          renderIntegrationStatus(`同期済み ${formatDateTime(data.updated_at)}`);
+          return;
+        }
+
+        await pushStateToCloud();
+      } catch (error) {
+        handleSyncError(error);
+      }
+    }
+
+    async function pushStateToCloud() {
+      if (!currentSession || !supabaseClient) return;
+
+      const updatedAt = new Date().toISOString();
+      state.updatedAt = updatedAt;
+
+      const { error } = await supabaseClient
+        .from(syncTable)
+        .upsert({
+          user_id: currentSession.user.id,
+          state: structuredClone(state),
+          updated_at: updatedAt
+        }, { onConflict: "user_id" });
+
+      if (error) throw error;
+
+      localStorage.setItem(storageKey, JSON.stringify(state));
+      renderIntegrationStatus(`同期済み ${formatDateTime(updatedAt)}`);
+    }
+
+    function handleSyncError(error) {
+      console.warn(error);
+      renderIntegrationStatus(`同期エラー: ${error.message || "不明なエラー"}`);
+    }
+
+    function renderIntegrationStatus(message) {
+      const configured = isCloudSyncConfigured();
+      const connected = Boolean(currentSession);
+      const defaultMessage = configured
+        ? connected
+          ? `接続済み: ${currentSession.user.email || "ログイン中"}`
+          : "未ログイン。メールリンクでログインできます。"
+        : "Supabase設定が必要です。設定後もローカル保存は使えます。";
+
+      document.getElementById("cloudSyncStatus").textContent = message || defaultMessage;
+
+      emailInput.disabled = !configured || connected;
+      signInButton.disabled = !configured || connected;
+      signOutButton.disabled = !configured || !connected;
+      syncNowButton.disabled = !configured || !connected;
+
       if (config.webAdsEnabled) {
         document.getElementById("adSlot").classList.add("ready");
       }
+    }
+
+    function formatDateTime(value) {
+      if (!value) return "";
+      return new Intl.DateTimeFormat("ja-JP", {
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(new Date(value));
     }
 
     function toNumber(value) {
