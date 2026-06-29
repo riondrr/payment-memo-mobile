@@ -1,6 +1,6 @@
 {
-  "name": "銀行・カード決済 月別管理",
-  "short_name": "決済メモ",
+  "name": "口座別引落 月別管理",
+  "short_name": "引落メモ",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#fbfaf7",
