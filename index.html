@@ -342,7 +342,8 @@
     }
 
     .payment-pill,
-    .payment-method {
+    .payment-method,
+    .debit-day {
       display: inline-flex;
       align-items: center;
       min-height: 24px;
@@ -367,6 +368,13 @@
       background: #fff7e5;
       color: var(--warn);
       border: 1px solid #eadab8;
+    }
+
+    .debit-day {
+      background: #f7f4ee;
+      color: var(--muted);
+      border: 1px solid #e5ddd0;
+      font-size: 11px;
     }
 
     .amount {
@@ -654,7 +662,7 @@
   <input id="importInput" type="file" accept="application/json" hidden>
   <div class="scrim" id="scrim"></div>
   <aside class="sheet" id="entrySheet" aria-hidden="true">
-    <form id="entryForm">
+    <form id="entryForm" novalidate>
       <div class="sheet-head">
         <h2 id="sheetTitle">明細</h2>
         <button class="icon-button" id="closeSheetButton" type="button" title="閉じる" aria-label="閉じる">×</button>
@@ -682,6 +690,10 @@
       <div class="field">
         <label for="amountInput">金額</label>
         <input id="amountInput" inputmode="numeric" placeholder="0">
+      </div>
+      <div class="field">
+        <label for="debitDayInput">引落日</label>
+        <input id="debitDayInput" inputmode="numeric" type="number" min="1" max="31" placeholder="27">
       </div>
       <div class="field">
         <label for="noteInput">備考</label>
@@ -752,14 +764,14 @@
           id: "2026-05",
           label: "2026年5月",
           items: [
-            { id: "sbi-rent", debitAccount: "住信SBIネット銀行", paymentType: "direct", paymentMethod: "", content: "家賃", amount: "", note: "", paid: false },
-            { id: "recruit-gas", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "リクルートカード", content: "ガス代", amount: "", note: "", paid: false },
-            { id: "recruit-water", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "リクルートカード", content: "水道", amount: "", note: "", paid: false },
-            { id: "paypay-bank", debitAccount: "PayPay銀行", paymentType: "direct", paymentMethod: "", content: "", amount: "", note: "", paid: false },
-            { id: "paypay-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "PayPayカード", content: "普段使い", amount: "", note: "", paid: false },
-            { id: "orico-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "オリコカード", content: "予備", amount: "", note: "", paid: false },
-            { id: "smbc", debitAccount: "SMBC", paymentType: "direct", paymentMethod: "", content: "", amount: "", note: "", paid: false },
-            { id: "olive-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "Oliveカード", content: "SBI証券", amount: "", note: "", paid: false }
+            { id: "sbi-rent", debitAccount: "住信SBIネット銀行", paymentType: "direct", paymentMethod: "", content: "家賃", amount: "", debitDay: null, note: "", paid: false },
+            { id: "recruit-gas", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "リクルートカード", content: "ガス代", amount: "", debitDay: null, note: "", paid: false },
+            { id: "recruit-water", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "リクルートカード", content: "水道", amount: "", debitDay: null, note: "", paid: false },
+            { id: "paypay-bank", debitAccount: "PayPay銀行", paymentType: "direct", paymentMethod: "", content: "", amount: "", debitDay: null, note: "", paid: false },
+            { id: "paypay-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "PayPayカード", content: "普段使い", amount: "", debitDay: null, note: "", paid: false },
+            { id: "orico-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "オリコカード", content: "予備", amount: "", debitDay: null, note: "", paid: false },
+            { id: "smbc", debitAccount: "SMBC", paymentType: "direct", paymentMethod: "", content: "", amount: "", debitDay: null, note: "", paid: false },
+            { id: "olive-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "Oliveカード", content: "SBI証券", amount: "", debitDay: null, note: "", paid: false }
           ]
         }
       ]
@@ -802,6 +814,7 @@
     const paymentMethodInput = document.getElementById("paymentMethodInput");
     const contentInput = document.getElementById("contentInput");
     const amountInput = document.getElementById("amountInput");
+    const debitDayInput = document.getElementById("debitDayInput");
     const noteInput = document.getElementById("noteInput");
     const entryError = document.getElementById("entryError");
     const accountSuggestions = document.getElementById("accountSuggestions");
@@ -862,7 +875,7 @@
         ? normalized.activeMonth
         : normalized.months[0]?.id || seed.activeMonth;
       normalized.updatedAt = normalized.updatedAt || new Date().toISOString();
-      normalized.schemaVersion = 2;
+      normalized.schemaVersion = 3;
       return normalized;
     }
 
@@ -891,6 +904,7 @@
             : "",
           content: String(item.content || "").trim(),
           amount: String(item.amount || "").trim(),
+          debitDay: normalizeDebitDay(item.debitDay),
           note: String(item.note || "").trim(),
           paid: Boolean(item.paid)
         };
@@ -905,6 +919,7 @@
         paymentMethod: legacyIsCard ? legacyMethod : "",
         content: String(item?.content || "").trim(),
         amount: String(item?.amount || "").trim(),
+        debitDay: null,
         note: String(item?.note || "").trim(),
         paid: Boolean(item?.paid)
       };
@@ -912,6 +927,12 @@
 
     function normalizePaymentType(value) {
       return value === "card" ? "card" : "direct";
+    }
+
+    function normalizeDebitDay(value) {
+      if (value === null || value === undefined || value === "") return null;
+      const number = Number(value);
+      return Number.isInteger(number) && number >= 1 && number <= 31 ? number : null;
     }
 
     function isLikelyCardMethod(value) {
@@ -1011,6 +1032,7 @@
               <div class="entry-meta">
                 <span class="payment-pill ${paymentType === "card" ? "card" : "direct"}">${paymentLabels[paymentType]}</span>
                 ${paymentType === "card" ? `<span class="payment-method">${escapeHtml(paymentMethod)}</span>` : ""}
+                ${item.debitDay ? `<span class="debit-day">毎月${item.debitDay}日</span>` : ""}
               </div>
             </div>
             <button class="amount" type="button" title="編集" aria-label="編集">${formatAmount(item.amount)}</button>
@@ -1051,6 +1073,7 @@
         item.debitAccount,
         item.paymentMethod,
         paymentLabels[paymentType],
+        item.debitDay ? `毎月${item.debitDay}日` : "",
         item.content,
         item.note,
         item.amount,
@@ -1155,6 +1178,7 @@
           paymentMethod: normalizePaymentType(item.paymentType) === "card" ? item.paymentMethod : "",
           content: item.content,
           amount: "",
+          debitDay: normalizeDebitDay(item.debitDay),
           note: "",
           paid: false
         }))
@@ -1178,6 +1202,7 @@
       paymentMethodInput.value = item?.paymentMethod || "";
       contentInput.value = item?.content || "";
       amountInput.value = item?.amount || "";
+      debitDayInput.value = item?.debitDay || "";
       noteInput.value = item?.note || "";
       syncPaymentMethodField();
       sheet.classList.add("open");
@@ -1214,6 +1239,7 @@
       const debitAccount = debitAccountInput.value.trim();
       const paymentMethod = paymentType === "card" ? paymentMethodInput.value.trim() : "";
       const content = contentInput.value.trim();
+      const debitDay = normalizeDebitDay(debitDayInput.value);
 
       if (!debitAccount) {
         showEntryError("引落口座を入力してください。");
@@ -1230,12 +1256,18 @@
         return;
       }
 
+      if (debitDayInput.value.trim() && debitDay === null) {
+        showEntryError("引落日は1〜31の数字で入力してください。");
+        return;
+      }
+
       const payload = {
         debitAccount,
         paymentType,
         paymentMethod,
         content,
         amount: amountInput.value.trim(),
+        debitDay,
         note: noteInput.value.trim()
       };
 
