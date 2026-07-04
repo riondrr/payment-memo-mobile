@@ -15,9 +15,9 @@
    - Cloudflare Pages: `https://YOUR_PROJECT.pages.dev`
 7. Redirect URLsにも同じURLを追加します。
 
-個人用なら、まず自分のメールアドレスでログイン確認をします。動作確認後、他人が
-アカウントを作れないようにしたい場合は、Supabase Authentication設定で新規登録を
-オフにしてください。
+個人用なら、まず自分のメールアドレスでログイン確認をします。複数のメール
+アドレスでそれぞれ別データを持たせたい場合は、Supabase Authentication設定で
+新規登録を有効にしておきます。全員が同じデータを共有する機能は別設計です。
 
 ## 2. アプリを設定する
 
@@ -29,6 +29,7 @@ window.APP_CONFIG = {
   supabasePublishableKey: "YOUR_PUBLISHABLE_ANON_KEY",
   supabaseStateTable: "user_states",
   supabaseRedirectUrl: "https://YOUR_PROJECT.pages.dev",
+  defaultEmail: "you@example.com",
   ownerEmail: "you@example.com",
   cloudSyncEnabled: true,
   webAdsEnabled: false,
@@ -43,7 +44,9 @@ window.APP_CONFIG = {
 
 publishable anon keyは静的アプリに入れて問題ありません。SupabaseのRow Level
 Securityでユーザーごとのデータを保護します。service role keyは絶対にこの
-リポジトリへ入れないでください。
+リポジトリへ入れないでください。`defaultEmail`はメール欄の初期値です。
+`ownerEmail`は旧設定との互換用に残していますが、ログイン可能なメールを制限する
+用途では使いません。
 
 ## 3. ローカルで試す
 
@@ -62,6 +65,9 @@ http://localhost:4173
 設定 > メールリンクでログイン、から自分のメールアドレスへログインリンクを送り
 ます。リンクを開いたあと、データを入力して「今すぐ同期」を押します。ページ更新
 または別ブラウザで開き直し、同じデータが戻れば同期成功です。
+
+別のメールアドレスでログインした場合、そのユーザー専用の保存領域に切り替わり
+ます。同じ端末でメールを切り替えても、別ユーザーのデータは自動では混ざりません。
 
 ## 4. Cloudflare Pagesへデプロイする
 

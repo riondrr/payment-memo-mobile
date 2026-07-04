@@ -780,7 +780,10 @@
     const storageKey = "notion-payment-notes-v1";
     const config = window.APP_CONFIG || {};
     const syncTable = config.supabaseStateTable || "user_states";
-    const state = loadState();
+    const defaultEmail = String(config.defaultEmail || config.ownerEmail || "").trim();
+    let activeStorageKey = storageKey;
+    let activeStateSource = "anonymous";
+    const state = loadState(activeStorageKey);
     let editingId = null;
     let supabaseClient = null;
     let currentSession = null;
@@ -846,21 +849,28 @@
       navigator.serviceWorker.register("sw.js").catch(error => console.warn(error));
     }
 
-    function loadState() {
+    function loadState(key = storageKey) {
+      return readStoredState(key) || normalizeState(structuredClone(seed));
+    }
+
+    function readStoredState(key) {
       try {
-        const saved = JSON.parse(localStorage.getItem(storageKey));
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const saved = JSON.parse(raw);
         if (saved && Array.isArray(saved.months)) return normalizeState(saved);
       } catch (error) {
         console.warn(error);
       }
-      return normalizeState(structuredClone(seed));
+      return null;
     }
 
     function persist(options = {}) {
       if (!options.keepUpdatedAt) {
         state.updatedAt = new Date().toISOString();
       }
-      localStorage.setItem(storageKey, JSON.stringify(state));
+      localStorage.setItem(activeStorageKey, JSON.stringify(state));
+      activeStateSource = currentSession ? "user" : "anonymous";
       if (options.sync !== false) {
         scheduleCloudSync();
       }
@@ -949,7 +959,51 @@
       normalized.updatedAt = updatedAt || normalized.updatedAt;
       Object.keys(state).forEach(key => delete state[key]);
       Object.assign(state, normalized);
-      localStorage.setItem(storageKey, JSON.stringify(state));
+      localStorage.setItem(activeStorageKey, JSON.stringify(state));
+    }
+
+    function storageKeyForUser(user) {
+      return `${storageKey}:user:${user.id}`;
+    }
+
+    function configuredDefaultEmails() {
+      return [config.defaultEmail, config.ownerEmail]
+        .map(value => String(value || "").trim().toLowerCase())
+        .filter(Boolean);
+    }
+
+    function isDefaultEmailUser(user) {
+      const email = String(user?.email || "").trim().toLowerCase();
+      return Boolean(email && configuredDefaultEmails().includes(email));
+    }
+
+    function switchToUserStorage(user) {
+      const userStorageKey = storageKeyForUser(user);
+      if (activeStorageKey === userStorageKey) return;
+
+      activeStorageKey = userStorageKey;
+      const saved = readStoredState(userStorageKey);
+      if (saved) {
+        activeStateSource = "user";
+        replaceState(saved, saved.updatedAt);
+        return;
+      }
+
+      const legacy = isDefaultEmailUser(user) ? readStoredState(storageKey) : null;
+      if (legacy) {
+        activeStateSource = "legacy";
+        replaceState(legacy, legacy.updatedAt);
+        return;
+      }
+
+      activeStateSource = "seed";
+      replaceState(structuredClone(seed));
+    }
+
+    function switchToAnonymousStorage() {
+      activeStorageKey = storageKey;
+      activeStateSource = "anonymous";
+      replaceState(readStoredState(storageKey) || structuredClone(seed));
     }
 
     function currentMonth() {
@@ -1342,8 +1396,8 @@
     }
 
     async function setupCloudSync() {
-      if (config.ownerEmail && !emailInput.value) {
-        emailInput.value = config.ownerEmail;
+      if (defaultEmail && !emailInput.value) {
+        emailInput.value = defaultEmail;
       }
 
       if (!isCloudSyncConfigured()) {
@@ -1370,9 +1424,14 @@
 
       supabaseClient.auth.onAuthStateChange(async (_event, session) => {
         currentSession = session;
-        if (session?.user?.email) {
-          emailInput.value = session.user.email;
+        if (session?.user) {
+          emailInput.value = session.user.email || "";
+          switchToUserStorage(session.user);
+          render();
           await syncState();
+        } else {
+          switchToAnonymousStorage();
+          render();
         }
         renderIntegrationStatus();
       });
@@ -1381,9 +1440,14 @@
         const { data, error } = await supabaseClient.auth.getSession();
         if (error) throw error;
         currentSession = data.session;
-        if (currentSession?.user?.email) {
-          emailInput.value = currentSession.user.email;
+        if (currentSession?.user) {
+          emailInput.value = currentSession.user.email || "";
+          switchToUserStorage(currentSession.user);
+          render();
           await syncState();
+        } else {
+          switchToAnonymousStorage();
+          render();
         }
       } catch (error) {
         handleSyncError(error);
@@ -1407,8 +1471,8 @@
         return;
       }
 
-      if (config.ownerEmail && email.toLowerCase() !== config.ownerEmail.toLowerCase()) {
-        renderIntegrationStatus("このアプリは設定済みのメールアドレス専用です。");
+      if (!emailInput.checkValidity()) {
+        renderIntegrationStatus("有効なメールアドレスを入力してください。");
         return;
       }
 
@@ -1432,7 +1496,10 @@
       try {
         const { error } = await supabaseClient.auth.signOut();
         if (error) throw error;
+        clearTimeout(syncTimer);
         currentSession = null;
+        switchToAnonymousStorage();
+        render();
         renderIntegrationStatus("ログアウトしました。");
       } catch (error) {
         handleSyncError(error);
@@ -1466,7 +1533,12 @@
         const localUpdatedAt = new Date(state.updatedAt || 0).getTime();
         const remoteUpdatedAt = new Date(data?.updated_at || 0).getTime();
 
-        if (data?.state && !options.forcePush && remoteUpdatedAt > localUpdatedAt) {
+        const shouldUseRemote = data?.state &&
+          !options.forcePush &&
+          (activeStateSource === "seed" || remoteUpdatedAt > localUpdatedAt);
+
+        if (shouldUseRemote) {
+          activeStateSource = "remote";
           replaceState(data.state, data.updated_at);
           render();
           renderIntegrationStatus(`同期済み ${formatDateTime(data.updated_at)}`);
@@ -1495,7 +1567,8 @@
 
       if (error) throw error;
 
-      localStorage.setItem(storageKey, JSON.stringify(state));
+      localStorage.setItem(activeStorageKey, JSON.stringify(state));
+      activeStateSource = "user";
       renderIntegrationStatus(`同期済み ${formatDateTime(updatedAt)}`);
     }
 

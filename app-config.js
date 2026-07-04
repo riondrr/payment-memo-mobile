@@ -1,9 +1,10 @@
 window.APP_CONFIG = {
-  supabaseUrl: "https://riondrr.github.io/payment-memo-mobile/",
+  supabaseUrl: "https://feekrdmoeptpafvynjbe.supabase.co",
   supabasePublishableKey: "sb_publishable_GbduA03akSCoewllQjo-zg_4OSEOhTo",
   supabaseStateTable: "user_states",
   supabaseRedirectUrl: "https://riondrr.github.io/payment-memo-mobile/",
-  ownerEmail: "mbrion04140@gmail.com",
+  defaultEmail: "taku04140@gmail.com",
+  ownerEmail: "taku04140@gmail.com",
   cloudSyncEnabled: true,
   webAdsEnabled: false,
   nativeBannerAdsEnabled: false,
