@@ -780,7 +780,6 @@
     const storageKey = "notion-payment-notes-v1";
     const config = window.APP_CONFIG || {};
     const syncTable = config.supabaseStateTable || "user_states";
-    const defaultEmail = String(config.defaultEmail || config.ownerEmail || "").trim();
     let activeStorageKey = storageKey;
     let activeStateSource = "anonymous";
     const state = loadState(activeStorageKey);
@@ -966,17 +965,6 @@
       return `${storageKey}:user:${user.id}`;
     }
 
-    function legacyMigrationEmails() {
-      return [config.defaultEmail, config.ownerEmail]
-        .map(value => String(value || "").trim().toLowerCase())
-        .filter(Boolean);
-    }
-
-    function canMigrateLegacyState(user) {
-      const email = String(user?.email || "").trim().toLowerCase();
-      return Boolean(email && legacyMigrationEmails().includes(email));
-    }
-
     function switchToUserStorage(user) {
       const userStorageKey = storageKeyForUser(user);
       if (activeStorageKey === userStorageKey) return;
@@ -986,13 +974,6 @@
       if (saved) {
         activeStateSource = "user";
         replaceState(saved, saved.updatedAt);
-        return;
-      }
-
-      const legacy = canMigrateLegacyState(user) ? readStoredState(storageKey) : null;
-      if (legacy) {
-        activeStateSource = "legacy";
-        replaceState(legacy, legacy.updatedAt);
         return;
       }
 
@@ -1396,10 +1377,6 @@
     }
 
     async function setupCloudSync() {
-      if (defaultEmail && !emailInput.value) {
-        emailInput.value = defaultEmail;
-      }
-
       if (!isCloudSyncConfigured()) {
         renderIntegrationStatus();
         return;
