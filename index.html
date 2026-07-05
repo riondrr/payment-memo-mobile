@@ -966,15 +966,15 @@
       return `${storageKey}:user:${user.id}`;
     }
 
-    function configuredDefaultEmails() {
+    function legacyMigrationEmails() {
       return [config.defaultEmail, config.ownerEmail]
         .map(value => String(value || "").trim().toLowerCase())
         .filter(Boolean);
     }
 
-    function isDefaultEmailUser(user) {
+    function canMigrateLegacyState(user) {
       const email = String(user?.email || "").trim().toLowerCase();
-      return Boolean(email && configuredDefaultEmails().includes(email));
+      return Boolean(email && legacyMigrationEmails().includes(email));
     }
 
     function switchToUserStorage(user) {
@@ -989,7 +989,7 @@
         return;
       }
 
-      const legacy = isDefaultEmailUser(user) ? readStoredState(storageKey) : null;
+      const legacy = canMigrateLegacyState(user) ? readStoredState(storageKey) : null;
       if (legacy) {
         activeStateSource = "legacy";
         replaceState(legacy, legacy.updatedAt);

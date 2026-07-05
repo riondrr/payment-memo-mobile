@@ -30,7 +30,6 @@ window.APP_CONFIG = {
   supabaseStateTable: "user_states",
   supabaseRedirectUrl: "https://YOUR_PROJECT.pages.dev",
   defaultEmail: "you@example.com",
-  ownerEmail: "you@example.com",
   cloudSyncEnabled: true,
   webAdsEnabled: false,
   nativeBannerAdsEnabled: false,
@@ -44,9 +43,8 @@ window.APP_CONFIG = {
 
 publishable anon keyは静的アプリに入れて問題ありません。SupabaseのRow Level
 Securityでユーザーごとのデータを保護します。service role keyは絶対にこの
-リポジトリへ入れないでください。`defaultEmail`はメール欄の初期値です。
-`ownerEmail`は旧設定との互換用に残していますが、ログイン可能なメールを制限する
-用途では使いません。
+リポジトリへ入れないでください。`defaultEmail`はメール欄の初期値で、ログイン
+可能なメールアドレスを制限する設定ではありません。
 
 ## 3. ローカルで試す
 
