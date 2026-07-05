@@ -343,7 +343,8 @@
 
     .payment-pill,
     .payment-method,
-    .debit-day {
+    .debit-day,
+    .billing-cycle {
       display: inline-flex;
       align-items: center;
       min-height: 24px;
@@ -374,6 +375,13 @@
       background: #f7f4ee;
       color: var(--muted);
       border: 1px solid #e5ddd0;
+      font-size: 11px;
+    }
+
+    .billing-cycle {
+      background: #eef7f6;
+      color: #23645f;
+      border: 1px solid #cfe6e2;
       font-size: 11px;
     }
 
@@ -696,6 +704,16 @@
         <input id="debitDayInput" inputmode="numeric" type="number" min="1" max="31" placeholder="27">
       </div>
       <div class="field">
+        <label for="billingCycleInput">支払い周期</label>
+        <select id="billingCycleInput">
+          <option value="1">毎月</option>
+          <option value="2">2ヶ月ごと</option>
+          <option value="3">3ヶ月ごと</option>
+          <option value="6">6ヶ月ごと</option>
+          <option value="12">12ヶ月ごと</option>
+        </select>
+      </div>
+      <div class="field">
         <label for="noteInput">備考</label>
         <textarea id="noteInput"></textarea>
       </div>
@@ -764,14 +782,14 @@
           id: "2026-05",
           label: "2026年5月",
           items: [
-            { id: "sbi-rent", debitAccount: "住信SBIネット銀行", paymentType: "direct", paymentMethod: "", content: "家賃", amount: "", debitDay: null, note: "", paid: false },
-            { id: "recruit-gas", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "リクルートカード", content: "ガス代", amount: "", debitDay: null, note: "", paid: false },
-            { id: "recruit-water", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "リクルートカード", content: "水道", amount: "", debitDay: null, note: "", paid: false },
-            { id: "paypay-bank", debitAccount: "PayPay銀行", paymentType: "direct", paymentMethod: "", content: "", amount: "", debitDay: null, note: "", paid: false },
-            { id: "paypay-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "PayPayカード", content: "普段使い", amount: "", debitDay: null, note: "", paid: false },
-            { id: "orico-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "オリコカード", content: "予備", amount: "", debitDay: null, note: "", paid: false },
-            { id: "smbc", debitAccount: "SMBC", paymentType: "direct", paymentMethod: "", content: "", amount: "", debitDay: null, note: "", paid: false },
-            { id: "olive-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "Oliveカード", content: "SBI証券", amount: "", debitDay: null, note: "", paid: false }
+            { id: "sbi-rent", seriesId: "sbi-rent", debitAccount: "住信SBIネット銀行", paymentType: "direct", paymentMethod: "", content: "家賃", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
+            { id: "recruit-gas", seriesId: "recruit-gas", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "リクルートカード", content: "ガス代", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
+            { id: "recruit-water", seriesId: "recruit-water", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "リクルートカード", content: "水道", amount: "", debitDay: null, billingCycleMonths: 2, billingStartMonth: "2026-05", note: "", paid: false },
+            { id: "paypay-bank", seriesId: "paypay-bank", debitAccount: "PayPay銀行", paymentType: "direct", paymentMethod: "", content: "", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
+            { id: "paypay-card", seriesId: "paypay-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "PayPayカード", content: "普段使い", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
+            { id: "orico-card", seriesId: "orico-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "オリコカード", content: "予備", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
+            { id: "smbc", seriesId: "smbc", debitAccount: "SMBC", paymentType: "direct", paymentMethod: "", content: "", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
+            { id: "olive-card", seriesId: "olive-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "Oliveカード", content: "SBI証券", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false }
           ]
         }
       ]
@@ -817,6 +835,7 @@
     const contentInput = document.getElementById("contentInput");
     const amountInput = document.getElementById("amountInput");
     const debitDayInput = document.getElementById("debitDayInput");
+    const billingCycleInput = document.getElementById("billingCycleInput");
     const noteInput = document.getElementById("noteInput");
     const entryError = document.getElementById("entryError");
     const accountSuggestions = document.getElementById("accountSuggestions");
@@ -884,7 +903,7 @@
         ? normalized.activeMonth
         : normalized.months[0]?.id || seed.activeMonth;
       normalized.updatedAt = normalized.updatedAt || new Date().toISOString();
-      normalized.schemaVersion = 3;
+      normalized.schemaVersion = 4;
       return normalized;
     }
 
@@ -893,19 +912,23 @@
       return {
         id,
         label: month?.label || formatMonthLabel(id),
-        items: Array.isArray(month?.items) ? month.items.map(normalizeItem) : []
+        items: Array.isArray(month?.items) ? month.items.map(item => normalizeItem(item, id)) : []
       };
     }
 
-    function normalizeItem(item) {
+    function normalizeItem(item, monthId = seed.activeMonth) {
+      const id = item?.id || crypto.randomUUID();
       const paymentType = normalizePaymentType(item?.paymentType);
+      const billingCycleMonths = normalizeBillingCycleMonths(item?.billingCycleMonths);
+      const billingStartMonth = normalizeBillingStartMonth(item?.billingStartMonth, monthId);
       const hasAccountModel = "debitAccount" in Object(item) ||
         "paymentType" in Object(item) ||
         "paymentMethod" in Object(item);
 
       if (hasAccountModel) {
         return {
-          id: item.id || crypto.randomUUID(),
+          id,
+          seriesId: String(item.seriesId || id),
           debitAccount: String(item.debitAccount || unassignedAccount).trim() || unassignedAccount,
           paymentType,
           paymentMethod: paymentType === "card"
@@ -914,6 +937,8 @@
           content: String(item.content || "").trim(),
           amount: String(item.amount || "").trim(),
           debitDay: normalizeDebitDay(item.debitDay),
+          billingCycleMonths,
+          billingStartMonth,
           note: String(item.note || "").trim(),
           paid: Boolean(item.paid)
         };
@@ -922,13 +947,16 @@
       const legacyMethod = String(item?.method || "").trim();
       const legacyIsCard = isLikelyCardMethod(legacyMethod);
       return {
-        id: item?.id || crypto.randomUUID(),
+        id,
+        seriesId: String(item?.seriesId || id),
         debitAccount: legacyIsCard ? unassignedAccount : legacyMethod || unassignedAccount,
         paymentType: legacyIsCard ? "card" : "direct",
         paymentMethod: legacyIsCard ? legacyMethod : "",
         content: String(item?.content || "").trim(),
         amount: String(item?.amount || "").trim(),
         debitDay: null,
+        billingCycleMonths,
+        billingStartMonth,
         note: String(item?.note || "").trim(),
         paid: Boolean(item?.paid)
       };
@@ -944,6 +972,21 @@
       return Number.isInteger(number) && number >= 1 && number <= 31 ? number : null;
     }
 
+    function normalizeBillingCycleMonths(value) {
+      const number = Number(value);
+      return [2, 3, 6, 12].includes(number) ? number : 1;
+    }
+
+    function normalizeBillingStartMonth(value, fallback = seed.activeMonth) {
+      const candidate = String(value || fallback || seed.activeMonth);
+      return /^\d{4}-\d{2}$/.test(candidate) ? candidate : seed.activeMonth;
+    }
+
+    function billingCycleLabel(value) {
+      const cycle = normalizeBillingCycleMonths(value);
+      return cycle === 1 ? "毎月" : `${cycle}ヶ月ごと`;
+    }
+
     function isLikelyCardMethod(value) {
       return /カード|card/i.test(String(value || ""));
     }
@@ -951,6 +994,77 @@
     function formatMonthLabel(id) {
       const [year, month] = String(id).split("-");
       return year && month ? `${Number(year)}年${Number(month)}月` : "年月未設定";
+    }
+
+    function monthIndex(id) {
+      const [year, month] = String(id).split("-").map(Number);
+      return year * 12 + month - 1;
+    }
+
+    function isBillingDueInMonth(item, monthId) {
+      const cycle = normalizeBillingCycleMonths(item.billingCycleMonths);
+      if (cycle === 1) return true;
+      const startMonth = normalizeBillingStartMonth(item.billingStartMonth, monthId);
+      const diff = monthIndex(monthId) - monthIndex(startMonth);
+      return diff >= 0 && diff % cycle === 0;
+    }
+
+    function copyItemForMonth(item, targetMonthId) {
+      const cycle = normalizeBillingCycleMonths(item.billingCycleMonths);
+      return {
+        id: crypto.randomUUID(),
+        seriesId: item.seriesId || item.id || crypto.randomUUID(),
+        debitAccount: item.debitAccount || unassignedAccount,
+        paymentType: normalizePaymentType(item.paymentType),
+        paymentMethod: normalizePaymentType(item.paymentType) === "card" ? item.paymentMethod : "",
+        content: item.content,
+        amount: "",
+        debitDay: normalizeDebitDay(item.debitDay),
+        billingCycleMonths: cycle,
+        billingStartMonth: normalizeBillingStartMonth(item.billingStartMonth, targetMonthId),
+        note: "",
+        paid: false
+      };
+    }
+
+    function recurringTemplatesForMonth(targetMonthId) {
+      const targetIndex = monthIndex(targetMonthId);
+      const templates = new Map();
+      state.months
+        .slice()
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .forEach(month => {
+          if (monthIndex(month.id) > targetIndex) return;
+          month.items.forEach(item => {
+            const normalized = normalizeItem(item, month.id);
+            if (normalizeBillingCycleMonths(normalized.billingCycleMonths) > 1) {
+              templates.set(normalized.seriesId, normalized);
+            }
+          });
+        });
+      return Array.from(templates.values());
+    }
+
+    function itemsForNewMonth(targetMonthId) {
+      const base = currentMonth();
+      const items = [];
+      const seenSeriesIds = new Set();
+
+      base.items.forEach(item => {
+        const normalized = normalizeItem(item, base.id);
+        if (!isBillingDueInMonth(normalized, targetMonthId)) return;
+        items.push(copyItemForMonth(normalized, targetMonthId));
+        seenSeriesIds.add(normalized.seriesId);
+      });
+
+      recurringTemplatesForMonth(targetMonthId).forEach(item => {
+        if (seenSeriesIds.has(item.seriesId)) return;
+        if (!isBillingDueInMonth(item, targetMonthId)) return;
+        items.push(copyItemForMonth(item, targetMonthId));
+        seenSeriesIds.add(item.seriesId);
+      });
+
+      return items;
     }
 
     function replaceState(nextState, updatedAt) {
@@ -1058,6 +1172,7 @@
       const article = document.createElement("article");
       const paymentType = normalizePaymentType(item.paymentType);
       const paymentMethod = paymentType === "card" ? item.paymentMethod || "カード未設定" : "";
+      const billingCycleMonths = normalizeBillingCycleMonths(item.billingCycleMonths);
       article.className = `entry${item.paid ? " done" : ""}`;
       article.innerHTML = `
           <div class="entry-main">
@@ -1068,6 +1183,7 @@
                 <span class="payment-pill ${paymentType === "card" ? "card" : "direct"}">${paymentLabels[paymentType]}</span>
                 ${paymentType === "card" ? `<span class="payment-method">${escapeHtml(paymentMethod)}</span>` : ""}
                 ${item.debitDay ? `<span class="debit-day">毎月${item.debitDay}日</span>` : ""}
+                ${billingCycleMonths > 1 ? `<span class="billing-cycle">${billingCycleLabel(billingCycleMonths)}</span>` : ""}
               </div>
             </div>
             <button class="amount" type="button" title="編集" aria-label="編集">${formatAmount(item.amount)}</button>
@@ -1109,6 +1225,7 @@
         item.paymentMethod,
         paymentLabels[paymentType],
         item.debitDay ? `毎月${item.debitDay}日` : "",
+        normalizeBillingCycleMonths(item.billingCycleMonths) > 1 ? billingCycleLabel(item.billingCycleMonths) : "",
         item.content,
         item.note,
         item.amount,
@@ -1202,21 +1319,10 @@
         monthError.classList.add("show");
         return;
       }
-      const base = currentMonth();
       state.months.push({
         id,
         label,
-        items: base.items.map(item => ({
-          id: crypto.randomUUID(),
-          debitAccount: item.debitAccount || unassignedAccount,
-          paymentType: normalizePaymentType(item.paymentType),
-          paymentMethod: normalizePaymentType(item.paymentType) === "card" ? item.paymentMethod : "",
-          content: item.content,
-          amount: "",
-          debitDay: normalizeDebitDay(item.debitDay),
-          note: "",
-          paid: false
-        }))
+        items: itemsForNewMonth(id)
       });
       state.months.sort((a, b) => a.id.localeCompare(b.id));
       state.activeMonth = id;
@@ -1238,6 +1344,7 @@
       contentInput.value = item?.content || "";
       amountInput.value = item?.amount || "";
       debitDayInput.value = item?.debitDay || "";
+      billingCycleInput.value = String(normalizeBillingCycleMonths(item?.billingCycleMonths));
       noteInput.value = item?.note || "";
       syncPaymentMethodField();
       sheet.classList.add("open");
@@ -1275,6 +1382,12 @@
       const paymentMethod = paymentType === "card" ? paymentMethodInput.value.trim() : "";
       const content = contentInput.value.trim();
       const debitDay = normalizeDebitDay(debitDayInput.value);
+      const billingCycleMonths = normalizeBillingCycleMonths(billingCycleInput.value);
+      const existingItem = editingId ? month.items.find(entry => entry.id === editingId) : null;
+      const existingCycle = normalizeBillingCycleMonths(existingItem?.billingCycleMonths);
+      const billingStartMonth = existingItem && existingCycle === billingCycleMonths
+        ? normalizeBillingStartMonth(existingItem.billingStartMonth, month.id)
+        : month.id;
 
       if (!debitAccount) {
         showEntryError("引落口座を入力してください。");
@@ -1303,14 +1416,17 @@
         content,
         amount: amountInput.value.trim(),
         debitDay,
+        billingCycleMonths,
+        billingStartMonth,
         note: noteInput.value.trim()
       };
 
       if (editingId) {
-        const item = month.items.find(entry => entry.id === editingId);
-        Object.assign(item, payload);
+        const item = existingItem;
+        Object.assign(item, { seriesId: item.seriesId || item.id }, payload);
       } else {
-        month.items.push({ id: crypto.randomUUID(), paid: false, ...payload });
+        const id = crypto.randomUUID();
+        month.items.push({ id, seriesId: id, paid: false, ...payload });
       }
       persist();
       closeSheet();
