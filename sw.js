@@ -1,5 +1,5 @@
-const cacheName = "payment-notes-v8";
-const assets = ["./", "./index.html", "./app-config.js", "./manifest.json", "./icon.svg"];
+const cacheName = "payment-notes-v9";
+const assets = ["./", "./index.html", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)));
@@ -17,6 +17,11 @@ self.addEventListener("activate", event => {
 
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
+  const url = new URL(event.request.url);
+  if (url.pathname.endsWith("/app-config.js")) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then(cached => cached || fetch(event.request))
   );
