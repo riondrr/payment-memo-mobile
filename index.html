@@ -343,7 +343,9 @@
 
     .payment-pill,
     .payment-method,
-    .debit-day,
+    .debit-date,
+    .used-date,
+    .usage-period,
     .billing-cycle {
       display: inline-flex;
       align-items: center;
@@ -371,11 +373,25 @@
       border: 1px solid #eadab8;
     }
 
-    .debit-day {
+    .debit-date,
+    .used-date,
+    .usage-period {
       background: #f7f4ee;
       color: var(--muted);
       border: 1px solid #e5ddd0;
       font-size: 11px;
+    }
+
+    .used-date {
+      background: #f2faf8;
+      color: #23645f;
+      border-color: #cfe6e2;
+    }
+
+    .usage-period {
+      background: #fff7e5;
+      color: var(--warn);
+      border-color: #eadab8;
     }
 
     .billing-cycle {
@@ -700,8 +716,12 @@
         <input id="amountInput" inputmode="numeric" placeholder="0">
       </div>
       <div class="field">
-        <label for="debitDayInput">引落日</label>
-        <input id="debitDayInput" inputmode="numeric" type="number" min="1" max="31" placeholder="27">
+        <label for="usedDateInput">利用日</label>
+        <input id="usedDateInput" type="date">
+      </div>
+      <div class="field">
+        <label for="debitDateInput">引き落とし日</label>
+        <input id="debitDateInput" type="date">
       </div>
       <div class="field">
         <label for="billingCycleInput">支払い周期</label>
@@ -712,6 +732,16 @@
           <option value="6">6ヶ月ごと</option>
           <option value="12">12ヶ月ごと</option>
         </select>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="usagePeriodStartInput">利用期間 開始</label>
+          <input id="usagePeriodStartInput" type="date">
+        </div>
+        <div class="field">
+          <label for="usagePeriodEndInput">利用期間 終了</label>
+          <input id="usagePeriodEndInput" type="date">
+        </div>
       </div>
       <div class="field">
         <label for="noteInput">備考</label>
@@ -834,8 +864,11 @@
     const paymentMethodInput = document.getElementById("paymentMethodInput");
     const contentInput = document.getElementById("contentInput");
     const amountInput = document.getElementById("amountInput");
-    const debitDayInput = document.getElementById("debitDayInput");
+    const usedDateInput = document.getElementById("usedDateInput");
+    const debitDateInput = document.getElementById("debitDateInput");
     const billingCycleInput = document.getElementById("billingCycleInput");
+    const usagePeriodStartInput = document.getElementById("usagePeriodStartInput");
+    const usagePeriodEndInput = document.getElementById("usagePeriodEndInput");
     const noteInput = document.getElementById("noteInput");
     const entryError = document.getElementById("entryError");
     const accountSuggestions = document.getElementById("accountSuggestions");
@@ -903,7 +936,7 @@
         ? normalized.activeMonth
         : normalized.months[0]?.id || seed.activeMonth;
       normalized.updatedAt = normalized.updatedAt || new Date().toISOString();
-      normalized.schemaVersion = 4;
+      normalized.schemaVersion = 5;
       return normalized;
     }
 
@@ -921,6 +954,11 @@
       const paymentType = normalizePaymentType(item?.paymentType);
       const billingCycleMonths = normalizeBillingCycleMonths(item?.billingCycleMonths);
       const billingStartMonth = normalizeBillingStartMonth(item?.billingStartMonth, monthId);
+      const debitDate = normalizeDebitDate(item, monthId);
+      const debitDay = dayFromDate(debitDate) || normalizeDebitDay(item?.debitDay);
+      const usedDate = normalizeDateValue(item?.usedDate);
+      const usagePeriodStart = normalizeDateValue(item?.usagePeriodStart);
+      const usagePeriodEnd = normalizeDateValue(item?.usagePeriodEnd);
       const hasAccountModel = "debitAccount" in Object(item) ||
         "paymentType" in Object(item) ||
         "paymentMethod" in Object(item);
@@ -936,9 +974,13 @@
             : "",
           content: String(item.content || "").trim(),
           amount: String(item.amount || "").trim(),
-          debitDay: normalizeDebitDay(item.debitDay),
+          usedDate,
+          debitDate,
+          debitDay,
           billingCycleMonths,
           billingStartMonth,
+          usagePeriodStart,
+          usagePeriodEnd,
           note: String(item.note || "").trim(),
           paid: Boolean(item.paid)
         };
@@ -954,9 +996,13 @@
         paymentMethod: legacyIsCard ? legacyMethod : "",
         content: String(item?.content || "").trim(),
         amount: String(item?.amount || "").trim(),
-        debitDay: null,
+        usedDate,
+        debitDate,
+        debitDay,
         billingCycleMonths,
         billingStartMonth,
+        usagePeriodStart,
+        usagePeriodEnd,
         note: String(item?.note || "").trim(),
         paid: Boolean(item?.paid)
       };
@@ -972,6 +1018,41 @@
       return Number.isInteger(number) && number >= 1 && number <= 31 ? number : null;
     }
 
+    function normalizeDateValue(value) {
+      const candidate = String(value || "").trim();
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(candidate);
+      if (!match) return "";
+      const year = Number(match[1]);
+      const month = Number(match[2]);
+      const day = Number(match[3]);
+      const date = new Date(Date.UTC(year, month - 1, day));
+      const isValid = date.getUTCFullYear() === year &&
+        date.getUTCMonth() === month - 1 &&
+        date.getUTCDate() === day;
+      return isValid ? candidate : "";
+    }
+
+    function dayFromDate(value) {
+      const date = normalizeDateValue(value);
+      return date ? Number(date.slice(8, 10)) : null;
+    }
+
+    function dateFromMonthAndDay(monthId, value) {
+      const day = normalizeDebitDay(value);
+      const match = /^(\d{4})-(\d{2})$/.exec(String(monthId || ""));
+      if (!day || !match) return "";
+      const year = Number(match[1]);
+      const month = Number(match[2]);
+      const lastDay = new Date(year, month, 0).getDate();
+      return `${year}-${String(month).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+    }
+
+    function normalizeDebitDate(item, monthId) {
+      const debitDate = normalizeDateValue(item?.debitDate);
+      if (debitDate) return debitDate;
+      return dateFromMonthAndDay(monthId, item?.debitDay);
+    }
+
     function normalizeBillingCycleMonths(value) {
       const number = Number(value);
       return [2, 3, 6, 12].includes(number) ? number : 1;
@@ -985,6 +1066,22 @@
     function billingCycleLabel(value) {
       const cycle = normalizeBillingCycleMonths(value);
       return cycle === 1 ? "毎月" : `${cycle}ヶ月ごと`;
+    }
+
+    function formatDateLabel(value) {
+      const date = normalizeDateValue(value);
+      if (!date) return "";
+      const [year, month, day] = date.split("-");
+      return `${Number(year)}/${Number(month)}/${Number(day)}`;
+    }
+
+    function usagePeriodLabel(item) {
+      const start = formatDateLabel(item.usagePeriodStart);
+      const end = formatDateLabel(item.usagePeriodEnd);
+      if (start && end) return `${start}〜${end}`;
+      if (start) return `${start}〜`;
+      if (end) return `〜${end}`;
+      return "";
     }
 
     function isLikelyCardMethod(value) {
@@ -1011,6 +1108,7 @@
 
     function copyItemForMonth(item, targetMonthId) {
       const cycle = normalizeBillingCycleMonths(item.billingCycleMonths);
+      const debitDay = dayFromDate(item.debitDate) || normalizeDebitDay(item.debitDay);
       return {
         id: crypto.randomUUID(),
         seriesId: item.seriesId || item.id || crypto.randomUUID(),
@@ -1019,9 +1117,13 @@
         paymentMethod: normalizePaymentType(item.paymentType) === "card" ? item.paymentMethod : "",
         content: item.content,
         amount: "",
-        debitDay: normalizeDebitDay(item.debitDay),
+        usedDate: "",
+        debitDate: dateFromMonthAndDay(targetMonthId, debitDay),
+        debitDay,
         billingCycleMonths: cycle,
         billingStartMonth: normalizeBillingStartMonth(item.billingStartMonth, targetMonthId),
+        usagePeriodStart: "",
+        usagePeriodEnd: "",
         note: "",
         paid: false
       };
@@ -1132,7 +1234,7 @@
     function renderEntries() {
       const month = currentMonth();
       const query = searchInput.value.trim().toLowerCase();
-      const items = month.items.filter(item => matchesQuery(item, query));
+      const items = month.items.filter(item => matchesQuery(item, query, month.id));
       const accountGroups = groupItemsByDebitAccount(items);
 
       monthTitle.textContent = month.label;
@@ -1163,16 +1265,18 @@
         `;
 
         const accountItems = section.querySelector(".account-items");
-        group.items.forEach(item => accountItems.appendChild(renderEntryCard(item)));
+        group.items.forEach(item => accountItems.appendChild(renderEntryCard(item, month.id)));
         list.appendChild(section);
       });
     }
 
-    function renderEntryCard(item) {
+    function renderEntryCard(item, monthId) {
       const article = document.createElement("article");
       const paymentType = normalizePaymentType(item.paymentType);
       const paymentMethod = paymentType === "card" ? item.paymentMethod || "カード未設定" : "";
       const billingCycleMonths = normalizeBillingCycleMonths(item.billingCycleMonths);
+      const debitDate = item.debitDate || dateFromMonthAndDay(monthId, item.debitDay);
+      const usagePeriod = usagePeriodLabel(item);
       article.className = `entry${item.paid ? " done" : ""}`;
       article.innerHTML = `
           <div class="entry-main">
@@ -1182,20 +1286,57 @@
               <div class="entry-meta">
                 <span class="payment-pill ${paymentType === "card" ? "card" : "direct"}">${paymentLabels[paymentType]}</span>
                 ${paymentType === "card" ? `<span class="payment-method">${escapeHtml(paymentMethod)}</span>` : ""}
-                ${item.debitDay ? `<span class="debit-day">毎月${item.debitDay}日</span>` : ""}
+                ${debitDate ? `<span class="debit-date">引落 ${escapeHtml(formatDateLabel(debitDate))}</span>` : ""}
+                ${item.usedDate ? `<span class="used-date">利用 ${escapeHtml(formatDateLabel(item.usedDate))}</span>` : ""}
+                ${usagePeriod ? `<span class="usage-period">期間 ${escapeHtml(usagePeriod)}</span>` : ""}
                 ${billingCycleMonths > 1 ? `<span class="billing-cycle">${billingCycleLabel(billingCycleMonths)}</span>` : ""}
               </div>
             </div>
-            <button class="amount" type="button" title="編集" aria-label="編集">${formatAmount(item.amount)}</button>
+            <button class="amount" type="button" title="詳細と削除" aria-label="詳細と削除">${formatAmount(item.amount)}</button>
           </div>
           <div class="entry-fields">
+            <div class="field full">
+              <label>内容</label>
+              <input value="${escapeAttr(item.content)}" data-field="content">
+            </div>
+            <div class="field">
+              <label>引落口座</label>
+              <input list="accountSuggestions" value="${escapeAttr(item.debitAccount)}" data-field="debitAccount">
+            </div>
+            <div class="field">
+              <label>支払い種別</label>
+              <select data-field="paymentType">
+                <option value="direct" ${paymentType === "direct" ? "selected" : ""}>直接引落</option>
+                <option value="card" ${paymentType === "card" ? "selected" : ""}>カード払い</option>
+              </select>
+            </div>
+            <div class="field" ${paymentType === "card" ? "" : "hidden"}>
+              <label>カード名</label>
+              <input value="${escapeAttr(item.paymentMethod)}" data-field="paymentMethod">
+            </div>
             <div class="field">
               <label>金額</label>
               <input inputmode="numeric" value="${escapeAttr(item.amount)}" data-field="amount">
             </div>
             <div class="field">
+              <label>利用日</label>
+              <input type="date" value="${escapeAttr(item.usedDate)}" data-field="usedDate">
+            </div>
+            <div class="field">
+              <label>引き落とし日</label>
+              <input type="date" value="${escapeAttr(debitDate)}" data-field="debitDate">
+            </div>
+            <div class="field">
+              <label>利用期間 開始</label>
+              <input type="date" value="${escapeAttr(item.usagePeriodStart)}" data-field="usagePeriodStart">
+            </div>
+            <div class="field">
+              <label>利用期間 終了</label>
+              <input type="date" value="${escapeAttr(item.usagePeriodEnd)}" data-field="usagePeriodEnd">
+            </div>
+            <div class="field full">
               <label>備考</label>
-              <input value="${escapeAttr(item.note)}" data-field="note">
+              <textarea data-field="note">${escapeHtml(item.note)}</textarea>
             </div>
           </div>
         `;
@@ -1206,25 +1347,61 @@
         render();
       });
       article.querySelector(".amount").addEventListener("click", () => openSheet(item.id));
-      article.querySelectorAll("input").forEach(input => {
-        input.addEventListener("change", () => {
-          item[input.dataset.field] = input.value.trim();
+      article.querySelectorAll("[data-field]").forEach(control => {
+        control.addEventListener("change", () => {
+          updateInlineField(item, control.dataset.field, control.value);
           persist();
           render();
         });
       });
-      article.querySelector(".entry-title").addEventListener("click", () => openSheet(item.id));
       return article;
     }
 
-    function matchesQuery(item, query) {
+    function updateInlineField(item, field, value) {
+      const text = String(value || "").trim();
+      if (field === "debitAccount") {
+        item.debitAccount = text || unassignedAccount;
+        return;
+      }
+      if (field === "paymentType") {
+        item.paymentType = normalizePaymentType(text);
+        if (item.paymentType !== "card") {
+          item.paymentMethod = "";
+        }
+        return;
+      }
+      if (field === "paymentMethod") {
+        item.paymentMethod = normalizePaymentType(item.paymentType) === "card" ? text : "";
+        return;
+      }
+      if (field === "usedDate" || field === "usagePeriodStart" || field === "usagePeriodEnd") {
+        item[field] = normalizeDateValue(text);
+        return;
+      }
+      if (field === "debitDate") {
+        item.debitDate = normalizeDateValue(text);
+        item.debitDay = dayFromDate(item.debitDate);
+        return;
+      }
+      item[field] = text;
+    }
+
+    function matchesQuery(item, query, monthId) {
       if (!query) return true;
       const paymentType = normalizePaymentType(item.paymentType);
+      const debitDate = item.debitDate || dateFromMonthAndDay(monthId, item.debitDay);
+      const usagePeriod = usagePeriodLabel(item);
       const haystack = [
         item.debitAccount,
         item.paymentMethod,
         paymentLabels[paymentType],
-        item.debitDay ? `毎月${item.debitDay}日` : "",
+        debitDate,
+        formatDateLabel(debitDate),
+        item.usedDate,
+        formatDateLabel(item.usedDate),
+        item.usagePeriodStart,
+        item.usagePeriodEnd,
+        usagePeriod,
         normalizeBillingCycleMonths(item.billingCycleMonths) > 1 ? billingCycleLabel(item.billingCycleMonths) : "",
         item.content,
         item.note,
@@ -1334,7 +1511,7 @@
     function openSheet(id) {
       const item = id ? currentMonth().items.find(entry => entry.id === id) : null;
       editingId = id || null;
-      sheetTitle.textContent = item ? "明細を編集" : "明細を追加";
+      sheetTitle.textContent = item ? "明細の詳細" : "明細を追加";
       deleteButton.style.display = item ? "block" : "none";
       clearEntryError();
       renderAccountSuggestions();
@@ -1343,8 +1520,11 @@
       paymentMethodInput.value = item?.paymentMethod || "";
       contentInput.value = item?.content || "";
       amountInput.value = item?.amount || "";
-      debitDayInput.value = item?.debitDay || "";
+      usedDateInput.value = item?.usedDate || "";
+      debitDateInput.value = item?.debitDate || "";
       billingCycleInput.value = String(normalizeBillingCycleMonths(item?.billingCycleMonths));
+      usagePeriodStartInput.value = item?.usagePeriodStart || "";
+      usagePeriodEndInput.value = item?.usagePeriodEnd || "";
       noteInput.value = item?.note || "";
       syncPaymentMethodField();
       sheet.classList.add("open");
@@ -1381,8 +1561,12 @@
       const debitAccount = debitAccountInput.value.trim();
       const paymentMethod = paymentType === "card" ? paymentMethodInput.value.trim() : "";
       const content = contentInput.value.trim();
-      const debitDay = normalizeDebitDay(debitDayInput.value);
+      const usedDate = normalizeDateValue(usedDateInput.value);
+      const debitDate = normalizeDateValue(debitDateInput.value);
+      const debitDay = dayFromDate(debitDate);
       const billingCycleMonths = normalizeBillingCycleMonths(billingCycleInput.value);
+      const usagePeriodStart = normalizeDateValue(usagePeriodStartInput.value);
+      const usagePeriodEnd = normalizeDateValue(usagePeriodEndInput.value);
       const existingItem = editingId ? month.items.find(entry => entry.id === editingId) : null;
       const existingCycle = normalizeBillingCycleMonths(existingItem?.billingCycleMonths);
       const billingStartMonth = existingItem && existingCycle === billingCycleMonths
@@ -1404,8 +1588,15 @@
         return;
       }
 
-      if (debitDayInput.value.trim() && debitDay === null) {
-        showEntryError("引落日は1〜31の数字で入力してください。");
+      const invalidDateField = [
+        [usedDateInput, "利用日"],
+        [debitDateInput, "引き落とし日"],
+        [usagePeriodStartInput, "利用期間 開始"],
+        [usagePeriodEndInput, "利用期間 終了"]
+      ].find(([input]) => input.value.trim() && !normalizeDateValue(input.value));
+
+      if (invalidDateField) {
+        showEntryError(`${invalidDateField[1]}はYYYY-MM-DD形式で入力してください。`);
         return;
       }
 
@@ -1415,9 +1606,13 @@
         paymentMethod,
         content,
         amount: amountInput.value.trim(),
+        usedDate,
+        debitDate,
         debitDay,
         billingCycleMonths,
         billingStartMonth,
+        usagePeriodStart,
+        usagePeriodEnd,
         note: noteInput.value.trim()
       };
 
