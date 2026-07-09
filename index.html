@@ -22,6 +22,7 @@
       --warn: #9b5d22;
       --rose: #b85454;
       --shadow: 0 20px 50px rgba(70, 55, 34, .12);
+      --entry-label-height: 30px;
       --entry-control-height: 44px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
@@ -514,6 +515,22 @@
       gap: 8px;
     }
 
+    .entry-fields .field > label,
+    .entry-field-label-row {
+      min-height: var(--entry-label-height);
+      height: var(--entry-label-height);
+    }
+
+    .entry-fields .field > label {
+      display: flex;
+      align-items: center;
+      white-space: nowrap;
+    }
+
+    .entry-field-label-row label {
+      white-space: nowrap;
+    }
+
     .entry-fields .field input,
     .entry-fields .field textarea {
       box-sizing: border-box;
@@ -560,12 +577,13 @@
       grid-column: span 2;
     }
 
-    .entry-field-used {
-      grid-column: span 5;
+    .entry-field-debit > label {
+      font-size: 11px;
     }
 
+    .entry-field-used,
     .entry-field-note {
-      grid-column: span 3;
+      grid-column: span 4;
     }
 
     .field-row {
@@ -843,7 +861,7 @@
         <input id="usedDateInput" type="date">
       </div>
       <div class="field">
-        <label for="debitDateInput">引き落とし日</label>
+        <label for="debitDateInput">引落とし日</label>
         <input id="debitDateInput" type="date">
       </div>
       <div class="field">
@@ -1569,7 +1587,7 @@
               </div>
             </div>
             <div class="field entry-field-debit">
-              <label>引き落とし日</label>
+              <label>引落とし日</label>
               <input inputmode="numeric" maxlength="2" pattern="[0-9]*" value="${escapeAttr(debitDayLabel)}" data-field="debitDate">
             </div>
             <div class="field entry-field-used">
@@ -1850,7 +1868,7 @@
 
       const invalidDateField = [
         [usedDateInput, "利用日"],
-        [debitDateInput, "引き落とし日"],
+        [debitDateInput, "引落とし日"],
         [usagePeriodStartInput, "利用期間 開始"],
         [usagePeriodEndInput, "利用期間 終了"]
       ].find(([input]) => input.value.trim() && !normalizeDateValue(input.value));
