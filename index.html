@@ -417,7 +417,7 @@
 
     .entry-fields {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr;
       gap: 8px;
       margin-top: 12px;
     }
@@ -446,6 +446,7 @@
     .field select {
       width: 100%;
       min-width: 0;
+      max-width: 100%;
       border: 1px solid #d8d0c3;
       background: #fff;
       color: var(--ink);
@@ -454,9 +455,49 @@
       outline-color: var(--accent);
     }
 
+    .field input[type="date"] {
+      min-width: 0;
+      max-width: 100%;
+    }
+
     .field textarea {
       min-height: 54px;
       resize: vertical;
+    }
+
+    .usage-period-control {
+      display: grid;
+      gap: 7px;
+    }
+
+    .usage-period-inputs {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 6px;
+      align-items: center;
+    }
+
+    .usage-period-separator {
+      color: var(--muted);
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .inline-action {
+      justify-self: start;
+      min-height: 30px;
+      border-radius: 999px;
+      border: 1px solid #cfe6e2;
+      background: #f2faf8;
+      color: var(--accent);
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .inline-action:disabled {
+      cursor: not-allowed;
+      opacity: .45;
     }
 
     .field-row {
@@ -733,14 +774,15 @@
           <option value="12">12ヶ月ごと</option>
         </select>
       </div>
-      <div class="field-row">
-        <div class="field">
-          <label for="usagePeriodStartInput">利用期間 開始</label>
-          <input id="usagePeriodStartInput" type="date">
-        </div>
-        <div class="field">
-          <label for="usagePeriodEndInput">利用期間 終了</label>
-          <input id="usagePeriodEndInput" type="date">
+      <div class="field">
+        <label for="usagePeriodStartInput">利用期間</label>
+        <div class="usage-period-control">
+          <div class="usage-period-inputs">
+            <input id="usagePeriodStartInput" type="date" aria-label="利用期間 開始">
+            <span class="usage-period-separator">〜</span>
+            <input id="usagePeriodEndInput" type="date" aria-label="利用期間 終了">
+          </div>
+          <button class="inline-action" id="sheetPreviousPeriodButton" type="button">前回の翌日</button>
         </div>
       </div>
       <div class="field">
@@ -869,6 +911,7 @@
     const billingCycleInput = document.getElementById("billingCycleInput");
     const usagePeriodStartInput = document.getElementById("usagePeriodStartInput");
     const usagePeriodEndInput = document.getElementById("usagePeriodEndInput");
+    const sheetPreviousPeriodButton = document.getElementById("sheetPreviousPeriodButton");
     const noteInput = document.getElementById("noteInput");
     const entryError = document.getElementById("entryError");
     const accountSuggestions = document.getElementById("accountSuggestions");
@@ -888,6 +931,7 @@
     monthForm.addEventListener("submit", addSelectedMonth);
     deleteButton.addEventListener("click", deleteEntry);
     paymentTypeInput.addEventListener("change", syncPaymentMethodField);
+    sheetPreviousPeriodButton.addEventListener("click", applyPreviousPeriodStartToSheet);
     signInButton.addEventListener("click", sendMagicLink);
     signOutButton.addEventListener("click", signOut);
     syncNowButton.addEventListener("click", () => syncState());
@@ -1084,6 +1128,40 @@
       return "";
     }
 
+    function addDaysToDate(value, days) {
+      const date = normalizeDateValue(value);
+      if (!date) return "";
+      const [year, month, day] = date.split("-").map(Number);
+      const next = new Date(Date.UTC(year, month - 1, day));
+      next.setUTCDate(next.getUTCDate() + days);
+      return [
+        next.getUTCFullYear(),
+        String(next.getUTCMonth() + 1).padStart(2, "0"),
+        String(next.getUTCDate()).padStart(2, "0")
+      ].join("-");
+    }
+
+    function previousUsagePeriodEnd(item, monthId) {
+      const seriesId = String(item?.seriesId || "").trim();
+      if (!seriesId) return "";
+      const targetIndex = monthIndex(monthId);
+      const previousMonths = state.months
+        .slice()
+        .filter(month => monthIndex(month.id) < targetIndex)
+        .sort((a, b) => b.id.localeCompare(a.id));
+
+      for (const month of previousMonths) {
+        const previousItem = month.items.find(entry => String(entry.seriesId || "") === seriesId);
+        const end = normalizeDateValue(previousItem?.usagePeriodEnd);
+        if (end) return end;
+      }
+      return "";
+    }
+
+    function previousUsagePeriodStart(item, monthId) {
+      return addDaysToDate(previousUsagePeriodEnd(item, monthId), 1);
+    }
+
     function isLikelyCardMethod(value) {
       return /カード|card/i.test(String(value || ""));
     }
@@ -1277,6 +1355,7 @@
       const billingCycleMonths = normalizeBillingCycleMonths(item.billingCycleMonths);
       const debitDate = item.debitDate || dateFromMonthAndDay(monthId, item.debitDay);
       const usagePeriod = usagePeriodLabel(item);
+      const previousPeriodStart = previousUsagePeriodStart(item, monthId);
       article.className = `entry${item.paid ? " done" : ""}`;
       article.innerHTML = `
           <div class="entry-main">
@@ -1295,25 +1374,6 @@
             <button class="amount" type="button" title="詳細と削除" aria-label="詳細と削除">${formatAmount(item.amount)}</button>
           </div>
           <div class="entry-fields">
-            <div class="field full">
-              <label>内容</label>
-              <input value="${escapeAttr(item.content)}" data-field="content">
-            </div>
-            <div class="field">
-              <label>引落口座</label>
-              <input list="accountSuggestions" value="${escapeAttr(item.debitAccount)}" data-field="debitAccount">
-            </div>
-            <div class="field">
-              <label>支払い種別</label>
-              <select data-field="paymentType">
-                <option value="direct" ${paymentType === "direct" ? "selected" : ""}>直接引落</option>
-                <option value="card" ${paymentType === "card" ? "selected" : ""}>カード払い</option>
-              </select>
-            </div>
-            <div class="field" ${paymentType === "card" ? "" : "hidden"}>
-              <label>カード名</label>
-              <input value="${escapeAttr(item.paymentMethod)}" data-field="paymentMethod">
-            </div>
             <div class="field">
               <label>金額</label>
               <input inputmode="numeric" value="${escapeAttr(item.amount)}" data-field="amount">
@@ -1327,12 +1387,15 @@
               <input type="date" value="${escapeAttr(debitDate)}" data-field="debitDate">
             </div>
             <div class="field">
-              <label>利用期間 開始</label>
-              <input type="date" value="${escapeAttr(item.usagePeriodStart)}" data-field="usagePeriodStart">
-            </div>
-            <div class="field">
-              <label>利用期間 終了</label>
-              <input type="date" value="${escapeAttr(item.usagePeriodEnd)}" data-field="usagePeriodEnd">
+              <label>利用期間</label>
+              <div class="usage-period-control">
+                <div class="usage-period-inputs">
+                  <input type="date" value="${escapeAttr(item.usagePeriodStart)}" data-field="usagePeriodStart" aria-label="利用期間 開始">
+                  <span class="usage-period-separator">〜</span>
+                  <input type="date" value="${escapeAttr(item.usagePeriodEnd)}" data-field="usagePeriodEnd" aria-label="利用期間 終了">
+                </div>
+                <button class="inline-action" type="button" data-action="previous-period-start" ${previousPeriodStart ? "" : "disabled"}>前回の翌日</button>
+              </div>
             </div>
             <div class="field full">
               <label>備考</label>
@@ -1347,6 +1410,13 @@
         render();
       });
       article.querySelector(".amount").addEventListener("click", () => openSheet(item.id));
+      article.querySelector("[data-action='previous-period-start']").addEventListener("click", () => {
+        const start = previousUsagePeriodStart(item, monthId);
+        if (!start) return;
+        item.usagePeriodStart = start;
+        persist();
+        render();
+      });
       article.querySelectorAll("[data-field]").forEach(control => {
         control.addEventListener("change", () => {
           updateInlineField(item, control.dataset.field, control.value);
@@ -1526,6 +1596,7 @@
       usagePeriodStartInput.value = item?.usagePeriodStart || "";
       usagePeriodEndInput.value = item?.usagePeriodEnd || "";
       noteInput.value = item?.note || "";
+      syncPreviousPeriodButton(item);
       syncPaymentMethodField();
       sheet.classList.add("open");
       scrim.classList.add("open");
@@ -1647,6 +1718,20 @@
     function clearEntryError() {
       entryError.textContent = "";
       entryError.classList.remove("show");
+    }
+
+    function syncPreviousPeriodButton(item) {
+      const start = item ? previousUsagePeriodStart(item, currentMonth().id) : "";
+      sheetPreviousPeriodButton.disabled = !start;
+      sheetPreviousPeriodButton.dataset.value = start;
+    }
+
+    function applyPreviousPeriodStartToSheet() {
+      const item = editingId ? currentMonth().items.find(entry => entry.id === editingId) : null;
+      const start = previousUsagePeriodStart(item, currentMonth().id);
+      if (!start) return;
+      usagePeriodStartInput.value = start;
+      sheetPreviousPeriodButton.dataset.value = start;
     }
 
     function deleteEntry() {
