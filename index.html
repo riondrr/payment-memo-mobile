@@ -22,6 +22,7 @@
       --warn: #9b5d22;
       --rose: #b85454;
       --shadow: 0 20px 50px rgba(70, 55, 34, .12);
+      --entry-label-height: 30px;
       --entry-control-height: 44px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
@@ -418,8 +419,8 @@
 
     .entry-fields {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      column-gap: 10px;
+      grid-template-columns: repeat(10, minmax(0, 1fr));
+      column-gap: 8px;
       row-gap: 8px;
       margin-top: 12px;
     }
@@ -504,7 +505,30 @@
     }
 
     .entry-field-period {
-      grid-column: 1 / -1;
+      grid-column: span 7;
+    }
+
+    .entry-field-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+    }
+
+    .entry-fields .field > label,
+    .entry-field-label-row {
+      min-height: var(--entry-label-height);
+      height: var(--entry-label-height);
+    }
+
+    .entry-fields .field > label {
+      display: flex;
+      align-items: center;
+      white-space: nowrap;
+    }
+
+    .entry-field-label-row label {
+      white-space: nowrap;
     }
 
     .entry-fields .field input,
@@ -539,6 +563,27 @@
     .entry-fields .usage-period-inputs input {
       height: var(--entry-control-height);
       min-height: var(--entry-control-height);
+    }
+
+    .entry-field-amount input {
+      text-align: right;
+    }
+
+    .entry-field-amount {
+      grid-column: span 3;
+    }
+
+    .entry-field-debit {
+      grid-column: span 2;
+    }
+
+    .entry-field-debit > label {
+      font-size: 11px;
+    }
+
+    .entry-field-used,
+    .entry-field-note {
+      grid-column: span 4;
     }
 
     .field-row {
@@ -724,6 +769,14 @@
         grid-template-columns: 1fr;
       }
 
+      .entry-field-amount,
+      .entry-field-period,
+      .entry-field-debit,
+      .entry-field-used,
+      .entry-field-note {
+        grid-column: 1 / -1;
+      }
+
       .amount {
         min-width: 68px;
       }
@@ -808,7 +861,7 @@
         <input id="usedDateInput" type="date">
       </div>
       <div class="field">
-        <label for="debitDateInput">引き落とし日</label>
+        <label for="debitDateInput">引落とし日</label>
         <input id="debitDateInput" type="date">
       </div>
       <div class="field">
@@ -1168,6 +1221,99 @@
       return `${Number(year)}/${Number(month)}/${Number(day)}`;
     }
 
+    function formatMonthDayLabel(value) {
+      const date = normalizeDateValue(value);
+      if (!date) return "";
+      const [, month, day] = date.split("-");
+      return `${month}/${day}`;
+    }
+
+    function formatDebitDayLabel(value) {
+      const day = dayFromDate(value) || normalizeDebitDay(value);
+      return day ? String(day).padStart(2, "0") : "";
+    }
+
+    function dateYear(value) {
+      const date = normalizeDateValue(value);
+      return date ? Number(date.slice(0, 4)) : null;
+    }
+
+    function monthIdYear(monthId) {
+      const match = /^(\d{4})-\d{2}$/.exec(String(monthId || ""));
+      if (match) return Number(match[1]);
+      const seedMatch = /^(\d{4})-\d{2}$/.exec(String(seed.activeMonth || ""));
+      return seedMatch ? Number(seedMatch[1]) : new Date().getFullYear();
+    }
+
+    function monthDayParts(value) {
+      const date = normalizeDateValue(value);
+      if (!date) return null;
+      return {
+        month: Number(date.slice(5, 7)),
+        day: Number(date.slice(8, 10))
+      };
+    }
+
+    function monthDayRank(parts) {
+      return parts.month * 100 + parts.day;
+    }
+
+    function parseMonthDayInput(value) {
+      const text = String(value || "").trim();
+      if (!text) return { empty: true };
+      const date = normalizeDateValue(text);
+      if (date) {
+        return {
+          date,
+          month: Number(date.slice(5, 7)),
+          day: Number(date.slice(8, 10))
+        };
+      }
+      const compact = /^(\d{2})(\d{2})$/.exec(text);
+      const match = compact || /^(\d{1,2})[\/.-](\d{1,2})$/.exec(text);
+      if (!match) return null;
+      const month = Number(match[1]);
+      const day = Number(match[2]);
+      if (!Number.isInteger(month) || !Number.isInteger(day) || month < 1 || month > 12 || day < 1 || day > 31) {
+        return null;
+      }
+      return { month, day };
+    }
+
+    function dateFromParts(year, month, day) {
+      const date = new Date(Date.UTC(year, month - 1, day));
+      const isValid = date.getUTCFullYear() === year &&
+        date.getUTCMonth() === month - 1 &&
+        date.getUTCDate() === day;
+      if (!isValid) return "";
+      return [
+        date.getUTCFullYear(),
+        String(date.getUTCMonth() + 1).padStart(2, "0"),
+        String(date.getUTCDate()).padStart(2, "0")
+      ].join("-");
+    }
+
+    function usagePeriodDateFromMonthDay(value, item, field, monthId) {
+      const parsed = parseMonthDayInput(value);
+      if (!parsed) return null;
+      if (parsed.empty) return "";
+      if (parsed.date) return parsed.date;
+
+      const otherField = field === "usagePeriodEnd" ? "usagePeriodStart" : "usagePeriodEnd";
+      const otherParts = monthDayParts(item?.[otherField]);
+      let year = dateYear(item?.[field]) || monthIdYear(monthId);
+
+      if (otherParts && field === "usagePeriodEnd") {
+        const startYear = dateYear(item?.usagePeriodStart) || year;
+        year = monthDayRank(parsed) < monthDayRank(otherParts) ? startYear + 1 : startYear;
+      } else if (otherParts && field === "usagePeriodStart") {
+        const endYear = dateYear(item?.usagePeriodEnd) || year;
+        year = monthDayRank(parsed) > monthDayRank(otherParts) ? endYear - 1 : endYear;
+      }
+
+      return dateFromParts(year, parsed.month, parsed.day) || null;
+    }
+
     function usagePeriodLabel(item) {
       const start = formatDateLabel(item.usagePeriodStart);
       const end = formatDateLabel(item.usagePeriodEnd);
@@ -1403,7 +1549,9 @@
       const paymentMethod = paymentType === "card" ? item.paymentMethod || "カード未設定" : "";
       const billingCycleMonths = normalizeBillingCycleMonths(item.billingCycleMonths);
       const debitDate = item.debitDate || dateFromMonthAndDay(monthId, item.debitDay);
-      const usagePeriod = usagePeriodLabel(item);
+      const debitDayLabel = formatDebitDayLabel(debitDate);
+      const usagePeriodStartLabel = formatMonthDayLabel(item.usagePeriodStart);
+      const usagePeriodEndLabel = formatMonthDayLabel(item.usagePeriodEnd);
       const previousPeriodStart = previousUsagePeriodStart(item, monthId);
       article.className = `entry${item.paid ? " done" : ""}`;
       article.innerHTML = `
@@ -1414,9 +1562,7 @@
               <div class="entry-meta">
                 <span class="payment-pill ${paymentType === "card" ? "card" : "direct"}">${paymentLabels[paymentType]}</span>
                 ${paymentType === "card" ? `<span class="payment-method">${escapeHtml(paymentMethod)}</span>` : ""}
-                ${debitDate ? `<span class="debit-date">引落 ${escapeHtml(formatDateLabel(debitDate))}</span>` : ""}
                 ${item.usedDate ? `<span class="used-date">利用 ${escapeHtml(formatDateLabel(item.usedDate))}</span>` : ""}
-                ${usagePeriod ? `<span class="usage-period">期間 ${escapeHtml(usagePeriod)}</span>` : ""}
                 ${billingCycleMonths > 1 ? `<span class="billing-cycle">${billingCycleLabel(billingCycleMonths)}</span>` : ""}
               </div>
             </div>
@@ -1427,20 +1573,22 @@
               <label>金額</label>
               <input inputmode="numeric" value="${escapeAttr(item.amount)}" data-field="amount">
             </div>
-            <div class="field entry-field-debit">
-              <label>引き落とし日</label>
-              <input type="date" value="${escapeAttr(debitDate)}" data-field="debitDate">
-            </div>
             <div class="field entry-field-period">
-              <label>利用期間</label>
-              <div class="usage-period-control">
-                <div class="usage-period-inputs">
-                  <input type="date" value="${escapeAttr(item.usagePeriodStart)}" data-field="usagePeriodStart" aria-label="利用期間 開始">
-                  <span class="usage-period-separator">〜</span>
-                  <input type="date" value="${escapeAttr(item.usagePeriodEnd)}" data-field="usagePeriodEnd" aria-label="利用期間 終了">
-                </div>
+              <div class="entry-field-label-row">
+                <label>利用期間</label>
                 <button class="inline-action" type="button" data-action="previous-period-start" ${previousPeriodStart ? "" : "disabled"}>前回の翌日</button>
               </div>
+              <div class="usage-period-control">
+                <div class="usage-period-inputs">
+                  <input value="${escapeAttr(usagePeriodStartLabel)}" placeholder="MM/DD" data-field="usagePeriodStart" aria-label="利用期間 開始">
+                  <span class="usage-period-separator">〜</span>
+                  <input value="${escapeAttr(usagePeriodEndLabel)}" placeholder="MM/DD" data-field="usagePeriodEnd" aria-label="利用期間 終了">
+                </div>
+              </div>
+            </div>
+            <div class="field entry-field-debit">
+              <label>引落とし日</label>
+              <input inputmode="numeric" maxlength="2" pattern="[0-9]*" value="${escapeAttr(debitDayLabel)}" data-field="debitDate">
             </div>
             <div class="field entry-field-used">
               <label>利用日</label>
@@ -1467,16 +1615,18 @@
         render();
       });
       article.querySelectorAll("[data-field]").forEach(control => {
-        control.addEventListener("change", () => {
-          updateInlineField(item, control.dataset.field, control.value);
+        const commitInlineEdit = () => {
+          updateInlineField(item, control.dataset.field, control.value, monthId);
           persist();
           render();
-        });
+        };
+        control.addEventListener("change", commitInlineEdit);
+        control.addEventListener("blur", commitInlineEdit);
       });
       return article;
     }
 
-    function updateInlineField(item, field, value) {
+    function updateInlineField(item, field, value, monthId) {
       const text = String(value || "").trim();
       if (field === "debitAccount") {
         item.debitAccount = text || unassignedAccount;
@@ -1493,13 +1643,21 @@
         item.paymentMethod = normalizePaymentType(item.paymentType) === "card" ? text : "";
         return;
       }
-      if (field === "usedDate" || field === "usagePeriodStart" || field === "usagePeriodEnd") {
+      if (field === "usedDate") {
         item[field] = normalizeDateValue(text);
         return;
       }
+      if (field === "usagePeriodStart" || field === "usagePeriodEnd") {
+        const usageDate = usagePeriodDateFromMonthDay(text, item, field, monthId);
+        if (usageDate === null) return;
+        item[field] = usageDate;
+        return;
+      }
       if (field === "debitDate") {
-        item.debitDate = normalizeDateValue(text);
-        item.debitDay = dayFromDate(item.debitDate);
+        const debitDay = normalizeDebitDay(text);
+        if (text && debitDay === null) return;
+        item.debitDay = debitDay;
+        item.debitDate = debitDay ? dateFromMonthAndDay(monthId, debitDay) : "";
         return;
       }
       item[field] = text;
@@ -1710,7 +1868,7 @@
 
       const invalidDateField = [
         [usedDateInput, "利用日"],
-        [debitDateInput, "引き落とし日"],
+        [debitDateInput, "引落とし日"],
         [usagePeriodStartInput, "利用期間 開始"],
         [usagePeriodEndInput, "利用期間 終了"]
       ].find(([input]) => input.value.trim() && !normalizeDateValue(input.value));
