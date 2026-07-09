@@ -688,13 +688,19 @@
       display: none;
       min-height: 50px;
       margin: 16px -16px calc(-1 * max(24px, env(safe-area-inset-bottom)));
-      padding-bottom: env(safe-area-inset-bottom);
+      padding: 8px 0 env(safe-area-inset-bottom);
       background: #fff;
       border-top: 1px solid var(--line);
     }
 
     .ad-slot.ready {
-      display: block;
+      display: grid;
+      place-items: center;
+    }
+
+    .ad-slot .adsbygoogle {
+      width: 100%;
+      min-height: 50px;
     }
 
     .scrim {
@@ -956,6 +962,7 @@
     const noteInput = document.getElementById("noteInput");
     const entryError = document.getElementById("entryError");
     const accountSuggestions = document.getElementById("accountSuggestions");
+    const adSlot = document.getElementById("adSlot");
 
     document.getElementById("addEntryButton").addEventListener("click", () => openSheet());
     document.getElementById("addMonthButton").addEventListener("click", openMonthSheet);
@@ -980,6 +987,7 @@
     render();
     setupCloudSync();
     renderIntegrationStatus();
+    setupWebAds();
 
     if ("serviceWorker" in navigator && location.protocol !== "file:") {
       navigator.serviceWorker.register("sw.js").catch(error => console.warn(error));
@@ -2006,10 +2014,68 @@
       signInButton.disabled = !configured || connected;
       signOutButton.disabled = !configured || !connected;
       syncNowButton.disabled = !configured || !connected;
+    }
 
-      if (config.webAdsEnabled) {
-        document.getElementById("adSlot").classList.add("ready");
+    function setupWebAds() {
+      adSlot.classList.remove("ready");
+      adSlot.replaceChildren();
+
+      if (!isWebAdsConfigured()) return;
+
+      const publisherId = String(config.adsensePublisherId || "").trim();
+      const slotId = String(config.adsenseBannerSlotId || "").trim();
+      window.adsbygoogle = window.adsbygoogle || [];
+
+      if (config.adsenseNonPersonalizedAds !== false) {
+        window.adsbygoogle.requestNonPersonalizedAds = 1;
       }
+
+      const banner = document.createElement("ins");
+      banner.className = "adsbygoogle";
+      banner.style.display = "block";
+      banner.setAttribute("data-ad-client", publisherId);
+      banner.setAttribute("data-ad-slot", slotId);
+      banner.setAttribute("data-ad-format", "auto");
+      banner.setAttribute("data-full-width-responsive", "true");
+      adSlot.appendChild(banner);
+      adSlot.classList.add("ready");
+      loadAdsenseScript(publisherId);
+
+      try {
+        window.adsbygoogle.push({});
+      } catch (error) {
+        console.warn(error);
+      }
+    }
+
+    function isWebAdsConfigured() {
+      return Boolean(
+        config.webAdsEnabled &&
+        config.webAdsProvider === "adsense" &&
+        String(config.adsensePublisherId || "").trim() &&
+        String(config.adsenseBannerSlotId || "").trim() &&
+        !isLocalAdHost()
+      );
+    }
+
+    function isLocalAdHost() {
+      return location.protocol === "file:" ||
+        location.hostname === "localhost" ||
+        location.hostname === "127.0.0.1" ||
+        location.hostname === "0.0.0.0" ||
+        location.hostname === "::1";
+    }
+
+    function loadAdsenseScript(publisherId) {
+      const scriptId = "adsense-script";
+      if (document.getElementById(scriptId)) return;
+
+      const script = document.createElement("script");
+      script.id = scriptId;
+      script.async = true;
+      script.crossOrigin = "anonymous";
+      script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(publisherId)}`;
+      document.head.appendChild(script);
     }
 
     function formatDateTime(value) {
