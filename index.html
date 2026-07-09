@@ -507,6 +507,13 @@
       grid-column: 1 / -1;
     }
 
+    .entry-field-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
     .entry-fields .field input,
     .entry-fields .field textarea {
       box-sizing: border-box;
@@ -539,6 +546,10 @@
     .entry-fields .usage-period-inputs input {
       height: var(--entry-control-height);
       min-height: var(--entry-control-height);
+    }
+
+    .entry-field-amount input {
+      text-align: right;
     }
 
     .field-row {
@@ -1160,6 +1171,11 @@
       return `${Number(year)}/${Number(month)}/${Number(day)}`;
     }
 
+    function formatDebitDayLabel(value) {
+      const day = dayFromDate(value) || normalizeDebitDay(value);
+      return day ? String(day).padStart(2, "0") : "";
+    }
+
     function usagePeriodLabel(item) {
       const start = formatDateLabel(item.usagePeriodStart);
       const end = formatDateLabel(item.usagePeriodEnd);
@@ -1395,6 +1411,7 @@
       const paymentMethod = paymentType === "card" ? item.paymentMethod || "カード未設定" : "";
       const billingCycleMonths = normalizeBillingCycleMonths(item.billingCycleMonths);
       const debitDate = item.debitDate || dateFromMonthAndDay(monthId, item.debitDay);
+      const debitDayLabel = formatDebitDayLabel(debitDate);
       const usagePeriod = usagePeriodLabel(item);
       const previousPeriodStart = previousUsagePeriodStart(item, monthId);
       article.className = `entry${item.paid ? " done" : ""}`;
@@ -1406,9 +1423,9 @@
               <div class="entry-meta">
                 <span class="payment-pill ${paymentType === "card" ? "card" : "direct"}">${paymentLabels[paymentType]}</span>
                 ${paymentType === "card" ? `<span class="payment-method">${escapeHtml(paymentMethod)}</span>` : ""}
-                ${debitDate ? `<span class="debit-date">引落 ${escapeHtml(formatDateLabel(debitDate))}</span>` : ""}
+                ${debitDayLabel ? `<span class="debit-date">${escapeHtml(debitDayLabel)}</span>` : ""}
                 ${item.usedDate ? `<span class="used-date">利用 ${escapeHtml(formatDateLabel(item.usedDate))}</span>` : ""}
-                ${usagePeriod ? `<span class="usage-period">期間 ${escapeHtml(usagePeriod)}</span>` : ""}
+                ${usagePeriod ? `<span class="usage-period">${escapeHtml(usagePeriod)}</span>` : ""}
                 ${billingCycleMonths > 1 ? `<span class="billing-cycle">${billingCycleLabel(billingCycleMonths)}</span>` : ""}
               </div>
             </div>
@@ -1421,17 +1438,19 @@
             </div>
             <div class="field entry-field-debit">
               <label>引き落とし日</label>
-              <input type="date" value="${escapeAttr(debitDate)}" data-field="debitDate">
+              <input inputmode="numeric" maxlength="2" pattern="[0-9]*" value="${escapeAttr(debitDayLabel)}" data-field="debitDate">
             </div>
             <div class="field entry-field-period">
-              <label>利用期間</label>
+              <div class="entry-field-label-row">
+                <label>利用期間</label>
+                <button class="inline-action" type="button" data-action="previous-period-start" ${previousPeriodStart ? "" : "disabled"}>前回の翌日</button>
+              </div>
               <div class="usage-period-control">
                 <div class="usage-period-inputs">
                   <input type="date" value="${escapeAttr(item.usagePeriodStart)}" data-field="usagePeriodStart" aria-label="利用期間 開始">
                   <span class="usage-period-separator">〜</span>
                   <input type="date" value="${escapeAttr(item.usagePeriodEnd)}" data-field="usagePeriodEnd" aria-label="利用期間 終了">
                 </div>
-                <button class="inline-action" type="button" data-action="previous-period-start" ${previousPeriodStart ? "" : "disabled"}>前回の翌日</button>
               </div>
             </div>
             <div class="field entry-field-used">
@@ -1459,16 +1478,18 @@
         render();
       });
       article.querySelectorAll("[data-field]").forEach(control => {
-        control.addEventListener("change", () => {
-          updateInlineField(item, control.dataset.field, control.value);
+        const commitInlineEdit = () => {
+          updateInlineField(item, control.dataset.field, control.value, monthId);
           persist();
           render();
-        });
+        };
+        control.addEventListener("change", commitInlineEdit);
+        control.addEventListener("blur", commitInlineEdit);
       });
       return article;
     }
 
-    function updateInlineField(item, field, value) {
+    function updateInlineField(item, field, value, monthId) {
       const text = String(value || "").trim();
       if (field === "debitAccount") {
         item.debitAccount = text || unassignedAccount;
@@ -1490,8 +1511,10 @@
         return;
       }
       if (field === "debitDate") {
-        item.debitDate = normalizeDateValue(text);
-        item.debitDay = dayFromDate(item.debitDate);
+        const debitDay = normalizeDebitDay(text);
+        if (text && debitDay === null) return;
+        item.debitDay = debitDay;
+        item.debitDate = debitDay ? dateFromMonthAndDay(monthId, debitDay) : "";
         return;
       }
       item[field] = text;
