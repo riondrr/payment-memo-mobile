@@ -31,6 +31,10 @@ window.APP_CONFIG = {
   supabaseRedirectUrl: "https://YOUR_PROJECT.pages.dev",
   cloudSyncEnabled: true,
   webAdsEnabled: false,
+  webAdsProvider: "adsense",
+  adsensePublisherId: "",
+  adsenseBannerSlotId: "",
+  adsenseNonPersonalizedAds: true,
   nativeBannerAdsEnabled: false,
   nativeBannerAdsProvider: "admob",
   nativeRewardedVideoEnabled: false,
@@ -44,6 +48,11 @@ publishable anon keyは静的アプリに入れて問題ありません。Supaba
 Securityでユーザーごとのデータを保護します。service role keyは絶対にこの
 リポジトリへ入れないでください。メールアドレスは公開設定に入れず、各ユーザーが
 ログイン時に自分で入力します。
+
+AdSenseを使う場合は、`ADSENSE_SETUP.md`の手順で審査と広告ユニット作成を
+済ませてから、`webAdsEnabled`を`true`にし、`adsensePublisherId`と
+`adsenseBannerSlotId`を入力します。IDが空の間やローカル実行中は広告リクエスト
+を出さないため、申請前の開発でも安全に使えます。
 
 ## 3. ローカルで試す
 
