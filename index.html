@@ -655,6 +655,12 @@
       font-weight: 800;
     }
 
+    .settings-link {
+      display: grid;
+      place-items: center;
+      text-decoration: none;
+    }
+
     .status {
       display: grid;
       gap: 5px;
@@ -908,6 +914,7 @@
     </div>
     <button class="secondary" id="exportButton" type="button">バックアップを書き出す</button>
     <button class="secondary" id="importButton" type="button">バックアップから復元する</button>
+    <a class="secondary settings-link" href="privacy.html">プライバシーポリシー</a>
   </aside>
 
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
