@@ -343,11 +343,7 @@
       margin-top: 6px;
     }
 
-    .payment-pill,
-    .payment-method,
-    .debit-date,
-    .used-date,
-    .usage-period,
+    .payment-source,
     .billing-cycle {
       display: inline-flex;
       align-items: center;
@@ -359,41 +355,14 @@
       line-height: 1.2;
     }
 
-    .payment-pill {
+    .payment-source.direct {
       background: #f0eadf;
       color: #685c4d;
     }
 
-    .payment-pill.card {
+    .payment-source.card {
       background: var(--accent-soft);
       color: #0f5550;
-    }
-
-    .payment-method {
-      background: #fff7e5;
-      color: var(--warn);
-      border: 1px solid #eadab8;
-    }
-
-    .debit-date,
-    .used-date,
-    .usage-period {
-      background: #f7f4ee;
-      color: var(--muted);
-      border: 1px solid #e5ddd0;
-      font-size: 11px;
-    }
-
-    .used-date {
-      background: #f2faf8;
-      color: #23645f;
-      border-color: #cfe6e2;
-    }
-
-    .usage-period {
-      background: #fff7e5;
-      color: var(--warn);
-      border-color: #eadab8;
     }
 
     .billing-cycle {
@@ -565,7 +534,10 @@
       min-height: var(--entry-control-height);
     }
 
-    .entry-field-amount input {
+    .entry-field-amount input,
+    .entry-field-debit input,
+    .entry-field-period input,
+    .entry-field-used input {
       text-align: right;
     }
 
@@ -1547,6 +1519,7 @@
       const article = document.createElement("article");
       const paymentType = normalizePaymentType(item.paymentType);
       const paymentMethod = paymentType === "card" ? item.paymentMethod || "カード未設定" : "";
+      const paymentSourceLabel = paymentType === "card" ? paymentMethod : paymentLabels[paymentType];
       const billingCycleMonths = normalizeBillingCycleMonths(item.billingCycleMonths);
       const debitDate = item.debitDate || dateFromMonthAndDay(monthId, item.debitDay);
       const debitDayLabel = formatDebitDayLabel(debitDate);
@@ -1560,9 +1533,7 @@
             <div class="entry-title">
               <strong>${escapeHtml(item.content || "内容未設定")}</strong>
               <div class="entry-meta">
-                <span class="payment-pill ${paymentType === "card" ? "card" : "direct"}">${paymentLabels[paymentType]}</span>
-                ${paymentType === "card" ? `<span class="payment-method">${escapeHtml(paymentMethod)}</span>` : ""}
-                ${item.usedDate ? `<span class="used-date">利用 ${escapeHtml(formatDateLabel(item.usedDate))}</span>` : ""}
+                <span class="payment-source ${paymentType === "card" ? "card" : "direct"}">${escapeHtml(paymentSourceLabel)}</span>
                 ${billingCycleMonths > 1 ? `<span class="billing-cycle">${billingCycleLabel(billingCycleMonths)}</span>` : ""}
               </div>
             </div>
