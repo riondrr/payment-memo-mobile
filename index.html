@@ -551,10 +551,6 @@
       grid-column: span 3;
     }
 
-    .entry-field-account {
-      grid-column: span 7;
-    }
-
     .entry-field-debit {
       grid-column: span 2;
     }
@@ -571,25 +567,8 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
+      justify-content: flex-start;
       gap: 6px;
-    }
-
-    .period-month-input {
-      width: 128px;
-      min-height: 30px;
-      border: 1px solid #cfe6e2;
-      border-radius: 999px;
-      background: #fff;
-      color: var(--ink);
-      padding: 3px 9px;
-      font-size: 12px;
-      font-weight: 700;
-    }
-
-    .full-month-summary {
-      color: var(--accent);
-      font-size: 12px;
-      font-weight: 800;
     }
 
     .field-row {
@@ -794,7 +773,6 @@
 
       .entry-field-amount,
       .entry-field-period,
-      .entry-field-account,
       .entry-field-debit,
       .entry-field-note {
         grid-column: 1 / -1;
@@ -904,8 +882,6 @@
           <div class="period-actions">
             <button class="inline-action" id="sheetPreviousPeriodButton" type="button">前回の翌日</button>
             <button class="inline-action" id="sheetFullMonthButton" type="button">1ヶ月分</button>
-            <input class="period-month-input" id="sheetPeriodMonthInput" type="month" aria-label="1ヶ月分の対象年月">
-            <span class="full-month-summary" id="sheetFullMonthSummary"></span>
           </div>
         </div>
       </div>
@@ -1037,8 +1013,6 @@
     const usagePeriodEndInput = document.getElementById("usagePeriodEndInput");
     const sheetPreviousPeriodButton = document.getElementById("sheetPreviousPeriodButton");
     const sheetFullMonthButton = document.getElementById("sheetFullMonthButton");
-    const sheetPeriodMonthInput = document.getElementById("sheetPeriodMonthInput");
-    const sheetFullMonthSummary = document.getElementById("sheetFullMonthSummary");
     const noteInput = document.getElementById("noteInput");
     const entryError = document.getElementById("entryError");
     const accountSuggestions = document.getElementById("accountSuggestions");
@@ -1061,9 +1035,6 @@
     paymentTypeInput.addEventListener("change", syncPaymentMethodField);
     sheetPreviousPeriodButton.addEventListener("click", applyPreviousPeriodStartToSheet);
     sheetFullMonthButton.addEventListener("click", applyFullMonthToSheet);
-    sheetPeriodMonthInput.addEventListener("change", applyFullMonthToSheet);
-    usagePeriodStartInput.addEventListener("change", syncSheetFullMonthSummary);
-    usagePeriodEndInput.addEventListener("change", syncSheetFullMonthSummary);
     amountInput.addEventListener("input", formatAmountControl);
     signInButton.addEventListener("click", sendMagicLink);
     signOutButton.addEventListener("click", signOut);
@@ -1419,20 +1390,6 @@
       };
     }
 
-    function fullMonthIdForItem(item) {
-      const start = normalizeDateValue(item?.usagePeriodStart);
-      const end = normalizeDateValue(item?.usagePeriodEnd);
-      if (!start || !end || start.slice(0, 7) !== end.slice(0, 7)) return "";
-      const monthId = start.slice(0, 7);
-      const range = fullMonthRange(monthId);
-      return range && start === range.start && end === range.end ? monthId : "";
-    }
-
-    function fullMonthLabel(item) {
-      const monthId = fullMonthIdForItem(item);
-      return monthId ? `${formatMonthLabel(monthId)}（1ヶ月分）` : "";
-    }
-
     function isBillingDueInMonth(item, monthId) {
       const cycle = normalizeBillingCycleMonths(item.billingCycleMonths);
       if (cycle === 1) return true;
@@ -1613,8 +1570,6 @@
       const usagePeriodStartLabel = formatMonthDayLabel(item.usagePeriodStart);
       const usagePeriodEndLabel = formatMonthDayLabel(item.usagePeriodEnd);
       const previousPeriodStart = previousUsagePeriodStart(item, monthId);
-      const periodMonthId = fullMonthIdForItem(item) || offsetMonthId(monthId, -1);
-      const periodSummary = fullMonthLabel(item);
       article.className = `entry${item.paid ? " done" : ""}`;
       article.innerHTML = `
           <div class="entry-main">
@@ -1633,18 +1588,12 @@
               <label>金額</label>
               <input inputmode="numeric" value="${escapeAttr(formatAmountInput(item.amount))}" data-field="amount">
             </div>
-            <div class="field entry-field-account">
-              <label>引落口座</label>
-              <input list="accountSuggestions" value="${escapeAttr(item.debitAccount)}" data-field="debitAccount">
-            </div>
             <div class="field entry-field-period">
               <div class="entry-field-label-row">
                 <label>利用期間</label>
                 <div class="period-actions">
                   <button class="inline-action" type="button" data-action="previous-period-start" ${previousPeriodStart ? "" : "disabled"}>前回の翌日</button>
                   <button class="inline-action" type="button" data-action="full-month">1ヶ月分</button>
-                  <input class="period-month-input" type="month" value="${escapeAttr(periodMonthId)}" data-period-month aria-label="1ヶ月分の対象年月">
-                  <span class="full-month-summary">${escapeHtml(periodSummary)}</span>
                 </div>
               </div>
               <div class="usage-period-control">
@@ -1679,9 +1628,8 @@
         persist();
         render();
       });
-      const periodMonthControl = article.querySelector("[data-period-month]");
       const applyCardFullMonth = () => {
-        const range = fullMonthRange(periodMonthControl.value);
+        const range = fullMonthRange(offsetMonthId(monthId, -1));
         if (!range) return;
         item.usagePeriodStart = range.start;
         item.usagePeriodEnd = range.end;
@@ -1689,7 +1637,6 @@
         render();
       };
       article.querySelector("[data-action='full-month']").addEventListener("click", applyCardFullMonth);
-      periodMonthControl.addEventListener("change", applyCardFullMonth);
       article.querySelectorAll("[data-field]").forEach(control => {
         const commitInlineEdit = () => {
           updateInlineField(item, control.dataset.field, control.value, monthId);
@@ -1886,10 +1833,8 @@
       billingCycleInput.value = String(normalizeBillingCycleMonths(item?.billingCycleMonths));
       usagePeriodStartInput.value = item?.usagePeriodStart || "";
       usagePeriodEndInput.value = item?.usagePeriodEnd || "";
-      sheetPeriodMonthInput.value = fullMonthIdForItem(item) || offsetMonthId(currentMonth().id, -1);
       noteInput.value = item?.note || "";
       syncPreviousPeriodButton(item);
-      syncSheetFullMonthSummary();
       syncPaymentMethodField();
       sheet.classList.add("open");
       scrim.classList.add("open");
@@ -2025,23 +1970,13 @@
       if (!start) return;
       usagePeriodStartInput.value = start;
       sheetPreviousPeriodButton.dataset.value = start;
-      syncSheetFullMonthSummary();
     }
 
     function applyFullMonthToSheet() {
-      const range = fullMonthRange(sheetPeriodMonthInput.value);
+      const range = fullMonthRange(offsetMonthId(currentMonth().id, -1));
       if (!range) return;
       usagePeriodStartInput.value = range.start;
       usagePeriodEndInput.value = range.end;
-      syncSheetFullMonthSummary();
-    }
-
-    function syncSheetFullMonthSummary() {
-      const temporaryItem = {
-        usagePeriodStart: usagePeriodStartInput.value,
-        usagePeriodEnd: usagePeriodEndInput.value
-      };
-      sheetFullMonthSummary.textContent = fullMonthLabel(temporaryItem);
     }
 
     function deleteEntry() {
