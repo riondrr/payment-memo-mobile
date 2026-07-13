@@ -165,35 +165,34 @@
       min-width: 0;
     }
 
-    .tabs {
-      display: flex;
+    .month-navigation {
+      display: grid;
+      grid-template-columns: 40px minmax(0, 1fr) 40px;
       gap: 8px;
-      overflow-x: auto;
       padding: 10px 0 0;
-      scrollbar-width: none;
     }
 
-    .tabs::-webkit-scrollbar {
-      display: none;
-    }
-
-    .tab {
-      flex: 0 0 auto;
-      min-width: 92px;
-      height: 36px;
-      padding: 0 14px;
-      border-radius: 999px;
+    .month-navigation button,
+    .month-navigation select {
+      height: 40px;
+      min-width: 0;
+      border-radius: 8px;
       border: 1px solid var(--line);
       background: #fffaf1;
-      color: var(--muted);
+      color: var(--ink);
       font-size: 14px;
       font-weight: 700;
     }
 
-    .tab[aria-selected="true"] {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: white;
+    .month-navigation select {
+      width: 100%;
+      padding: 0 34px 0 12px;
+      text-align: center;
+    }
+
+    .month-navigation button:disabled {
+      cursor: not-allowed;
+      opacity: .4;
     }
 
     .month-head {
@@ -212,19 +211,21 @@
 
     .compact-actions {
       display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
       gap: 8px;
-      flex: 0 0 auto;
     }
 
     .soft-button {
       display: inline-grid;
       place-items: center;
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
+      min-height: 40px;
+      border: 1px solid #cfe6e2;
+      border-radius: 8px;
       background: var(--accent-soft);
       color: #0f5550;
-      font-size: 20px;
+      padding: 7px 11px;
+      font-size: 13px;
       font-weight: 800;
     }
 
@@ -474,7 +475,7 @@
     }
 
     .entry-field-period {
-      grid-column: span 7;
+      grid-column: 1 / -1;
     }
 
     .entry-field-label-row {
@@ -498,6 +499,12 @@
 
     .entry-field-label-row label {
       white-space: nowrap;
+    }
+
+    .entry-field-period .entry-field-label-row {
+      height: auto;
+      min-height: var(--entry-label-height);
+      flex-wrap: wrap;
     }
 
     .entry-fields .field input,
@@ -536,13 +543,16 @@
 
     .entry-field-amount input,
     .entry-field-debit input,
-    .entry-field-period input,
-    .entry-field-used input {
+    .entry-field-period input {
       text-align: right;
     }
 
     .entry-field-amount {
       grid-column: span 3;
+    }
+
+    .entry-field-account {
+      grid-column: span 7;
     }
 
     .entry-field-debit {
@@ -553,9 +563,33 @@
       font-size: 11px;
     }
 
-    .entry-field-used,
     .entry-field-note {
-      grid-column: span 4;
+      grid-column: span 8;
+    }
+
+    .period-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .period-month-input {
+      width: 128px;
+      min-height: 30px;
+      border: 1px solid #cfe6e2;
+      border-radius: 999px;
+      background: #fff;
+      color: var(--ink);
+      padding: 3px 9px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .full-month-summary {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
     }
 
     .field-row {
@@ -593,6 +627,11 @@
       position: fixed;
       inset: auto 0 0;
       z-index: 20;
+      max-height: 92vh;
+      max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top)));
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
       transform: translateY(110%);
       transition: transform .22s ease;
       padding: 14px 16px max(18px, env(safe-area-inset-bottom));
@@ -614,10 +653,16 @@
     }
 
     .sheet-head {
+      position: sticky;
+      top: -14px;
+      z-index: 2;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      margin: -14px -2px 0;
+      padding: 14px 2px 10px;
+      background: #fffdf9;
     }
 
     .sheet h2 {
@@ -749,8 +794,8 @@
 
       .entry-field-amount,
       .entry-field-period,
+      .entry-field-account,
       .entry-field-debit,
-      .entry-field-used,
       .entry-field-note {
         grid-column: 1 / -1;
       }
@@ -787,14 +832,14 @@
         <span>⌕</span>
         <input id="searchInput" type="search" placeholder="検索">
       </label>
-      <nav class="tabs" id="monthTabs" aria-label="月"></nav>
+      <nav class="month-navigation" id="monthTabs" aria-label="月"></nav>
     </section>
 
     <section class="month-head">
       <h2 id="monthTitle"></h2>
       <div class="compact-actions">
-        <button class="soft-button" id="addMonthButton" type="button" title="月を追加" aria-label="月を追加">＋</button>
-        <button class="soft-button" id="addEntryButton" type="button" title="明細を追加" aria-label="明細を追加">✎</button>
+        <button class="soft-button" id="addMonthButton" type="button">月を追加</button>
+        <button class="soft-button" id="addEntryButton" type="button">支払い方法を追加</button>
       </div>
     </section>
 
@@ -835,10 +880,6 @@
         <input id="amountInput" inputmode="numeric" placeholder="0">
       </div>
       <div class="field">
-        <label for="usedDateInput">利用日</label>
-        <input id="usedDateInput" type="date">
-      </div>
-      <div class="field">
         <label for="debitDateInput">引落とし日</label>
         <input id="debitDateInput" type="date">
       </div>
@@ -860,7 +901,12 @@
             <span class="usage-period-separator">〜</span>
             <input id="usagePeriodEndInput" type="date" aria-label="利用期間 終了">
           </div>
-          <button class="inline-action" id="sheetPreviousPeriodButton" type="button">前回の翌日</button>
+          <div class="period-actions">
+            <button class="inline-action" id="sheetPreviousPeriodButton" type="button">前回の翌日</button>
+            <button class="inline-action" id="sheetFullMonthButton" type="button">1ヶ月分</button>
+            <input class="period-month-input" id="sheetPeriodMonthInput" type="month" aria-label="1ヶ月分の対象年月">
+            <span class="full-month-summary" id="sheetFullMonthSummary"></span>
+          </div>
         </div>
       </div>
       <div class="field">
@@ -985,12 +1031,14 @@
     const paymentMethodInput = document.getElementById("paymentMethodInput");
     const contentInput = document.getElementById("contentInput");
     const amountInput = document.getElementById("amountInput");
-    const usedDateInput = document.getElementById("usedDateInput");
     const debitDateInput = document.getElementById("debitDateInput");
     const billingCycleInput = document.getElementById("billingCycleInput");
     const usagePeriodStartInput = document.getElementById("usagePeriodStartInput");
     const usagePeriodEndInput = document.getElementById("usagePeriodEndInput");
     const sheetPreviousPeriodButton = document.getElementById("sheetPreviousPeriodButton");
+    const sheetFullMonthButton = document.getElementById("sheetFullMonthButton");
+    const sheetPeriodMonthInput = document.getElementById("sheetPeriodMonthInput");
+    const sheetFullMonthSummary = document.getElementById("sheetFullMonthSummary");
     const noteInput = document.getElementById("noteInput");
     const entryError = document.getElementById("entryError");
     const accountSuggestions = document.getElementById("accountSuggestions");
@@ -1012,6 +1060,11 @@
     deleteButton.addEventListener("click", deleteEntry);
     paymentTypeInput.addEventListener("change", syncPaymentMethodField);
     sheetPreviousPeriodButton.addEventListener("click", applyPreviousPeriodStartToSheet);
+    sheetFullMonthButton.addEventListener("click", applyFullMonthToSheet);
+    sheetPeriodMonthInput.addEventListener("change", applyFullMonthToSheet);
+    usagePeriodStartInput.addEventListener("change", syncSheetFullMonthSummary);
+    usagePeriodEndInput.addEventListener("change", syncSheetFullMonthSummary);
+    amountInput.addEventListener("input", formatAmountControl);
     signInButton.addEventListener("click", sendMagicLink);
     signOutButton.addEventListener("click", signOut);
     syncNowButton.addEventListener("click", () => syncState());
@@ -1061,7 +1114,7 @@
         ? normalized.activeMonth
         : normalized.months[0]?.id || seed.activeMonth;
       normalized.updatedAt = normalized.updatedAt || new Date().toISOString();
-      normalized.schemaVersion = 5;
+      normalized.schemaVersion = 6;
       return normalized;
     }
 
@@ -1098,7 +1151,7 @@
             ? String(item.paymentMethod || item.method || "").trim()
             : "",
           content: String(item.content || "").trim(),
-          amount: String(item.amount || "").trim(),
+          amount: normalizeAmountValue(item.amount),
           usedDate,
           debitDate,
           debitDay,
@@ -1120,7 +1173,7 @@
         paymentType: legacyIsCard ? "card" : "direct",
         paymentMethod: legacyIsCard ? legacyMethod : "",
         content: String(item?.content || "").trim(),
-        amount: String(item?.amount || "").trim(),
+        amount: normalizeAmountValue(item?.amount),
         usedDate,
         debitDate,
         debitDay,
@@ -1350,6 +1403,36 @@
       return year * 12 + month - 1;
     }
 
+    function offsetMonthId(monthId, offset) {
+      const [year, month] = String(monthId).split("-").map(Number);
+      const date = new Date(Date.UTC(year, month - 1 + offset, 1));
+      return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+    }
+
+    function fullMonthRange(monthId) {
+      if (!/^\d{4}-\d{2}$/.test(String(monthId || ""))) return null;
+      const [year, month] = monthId.split("-").map(Number);
+      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      return {
+        start: `${monthId}-01`,
+        end: `${monthId}-${String(lastDay).padStart(2, "0")}`
+      };
+    }
+
+    function fullMonthIdForItem(item) {
+      const start = normalizeDateValue(item?.usagePeriodStart);
+      const end = normalizeDateValue(item?.usagePeriodEnd);
+      if (!start || !end || start.slice(0, 7) !== end.slice(0, 7)) return "";
+      const monthId = start.slice(0, 7);
+      const range = fullMonthRange(monthId);
+      return range && start === range.start && end === range.end ? monthId : "";
+    }
+
+    function fullMonthLabel(item) {
+      const monthId = fullMonthIdForItem(item);
+      return monthId ? `${formatMonthLabel(monthId)}（1ヶ月分）` : "";
+    }
+
     function isBillingDueInMonth(item, monthId) {
       const cycle = normalizeBillingCycleMonths(item.billingCycleMonths);
       if (cycle === 1) return true;
@@ -1361,6 +1444,7 @@
     function copyItemForMonth(item, targetMonthId) {
       const cycle = normalizeBillingCycleMonths(item.billingCycleMonths);
       const debitDay = dayFromDate(item.debitDate) || normalizeDebitDay(item.debitDay);
+      const usagePeriodStart = addDaysToDate(item.usagePeriodEnd, 1);
       return {
         id: crypto.randomUUID(),
         seriesId: item.seriesId || item.id || crypto.randomUUID(),
@@ -1374,51 +1458,28 @@
         debitDay,
         billingCycleMonths: cycle,
         billingStartMonth: normalizeBillingStartMonth(item.billingStartMonth, targetMonthId),
-        usagePeriodStart: "",
+        usagePeriodStart,
         usagePeriodEnd: "",
         note: "",
         paid: false
       };
     }
 
-    function recurringTemplatesForMonth(targetMonthId) {
-      const targetIndex = monthIndex(targetMonthId);
-      const templates = new Map();
+    function itemsForNewMonth(targetMonthId) {
+      const latestBySeries = new Map();
       state.months
-        .slice()
+        .filter(month => monthIndex(month.id) < monthIndex(targetMonthId))
         .sort((a, b) => a.id.localeCompare(b.id))
         .forEach(month => {
-          if (monthIndex(month.id) > targetIndex) return;
           month.items.forEach(item => {
             const normalized = normalizeItem(item, month.id);
-            if (normalizeBillingCycleMonths(normalized.billingCycleMonths) > 1) {
-              templates.set(normalized.seriesId, normalized);
-            }
+            latestBySeries.set(normalized.seriesId, normalized);
           });
         });
-      return Array.from(templates.values());
-    }
 
-    function itemsForNewMonth(targetMonthId) {
-      const base = currentMonth();
-      const items = [];
-      const seenSeriesIds = new Set();
-
-      base.items.forEach(item => {
-        const normalized = normalizeItem(item, base.id);
-        if (!isBillingDueInMonth(normalized, targetMonthId)) return;
-        items.push(copyItemForMonth(normalized, targetMonthId));
-        seenSeriesIds.add(normalized.seriesId);
-      });
-
-      recurringTemplatesForMonth(targetMonthId).forEach(item => {
-        if (seenSeriesIds.has(item.seriesId)) return;
-        if (!isBillingDueInMonth(item, targetMonthId)) return;
-        items.push(copyItemForMonth(item, targetMonthId));
-        seenSeriesIds.add(item.seriesId);
-      });
-
-      return items;
+      return Array.from(latestBySeries.values())
+        .filter(item => isBillingDueInMonth(item, targetMonthId))
+        .map(item => copyItemForMonth(item, targetMonthId));
     }
 
     function replaceState(nextState, updatedAt) {
@@ -1468,19 +1529,38 @@
 
     function renderTabs() {
       tabs.innerHTML = "";
-      state.months.forEach(month => {
-        const button = document.createElement("button");
-        button.className = "tab";
-        button.type = "button";
-        button.textContent = month.label;
-        button.setAttribute("aria-selected", String(month.id === state.activeMonth));
-        button.addEventListener("click", () => {
-          state.activeMonth = month.id;
-          persist();
-          render();
-        });
-        tabs.appendChild(button);
+      const sortedMonths = state.months.slice().sort((a, b) => a.id.localeCompare(b.id));
+      const activeIndex = sortedMonths.findIndex(month => month.id === state.activeMonth);
+      const previousButton = document.createElement("button");
+      previousButton.type = "button";
+      previousButton.textContent = "‹";
+      previousButton.title = "前の月";
+      previousButton.setAttribute("aria-label", "前の月");
+      previousButton.disabled = activeIndex <= 0;
+
+      const monthSelect = document.createElement("select");
+      monthSelect.setAttribute("aria-label", "表示する年月");
+      sortedMonths.forEach(month => {
+        monthSelect.add(new Option(month.label, month.id, false, month.id === state.activeMonth));
       });
+
+      const nextButton = document.createElement("button");
+      nextButton.type = "button";
+      nextButton.textContent = "›";
+      nextButton.title = "次の月";
+      nextButton.setAttribute("aria-label", "次の月");
+      nextButton.disabled = activeIndex < 0 || activeIndex >= sortedMonths.length - 1;
+
+      const selectMonth = id => {
+        if (!id) return;
+        state.activeMonth = id;
+        persist();
+        render();
+      };
+      previousButton.addEventListener("click", () => selectMonth(sortedMonths[activeIndex - 1]?.id));
+      nextButton.addEventListener("click", () => selectMonth(sortedMonths[activeIndex + 1]?.id));
+      monthSelect.addEventListener("change", () => selectMonth(monthSelect.value));
+      tabs.append(previousButton, monthSelect, nextButton);
     }
 
     function renderEntries() {
@@ -1533,6 +1613,8 @@
       const usagePeriodStartLabel = formatMonthDayLabel(item.usagePeriodStart);
       const usagePeriodEndLabel = formatMonthDayLabel(item.usagePeriodEnd);
       const previousPeriodStart = previousUsagePeriodStart(item, monthId);
+      const periodMonthId = fullMonthIdForItem(item) || offsetMonthId(monthId, -1);
+      const periodSummary = fullMonthLabel(item);
       article.className = `entry${item.paid ? " done" : ""}`;
       article.innerHTML = `
           <div class="entry-main">
@@ -1549,12 +1631,21 @@
           <div class="entry-fields">
             <div class="field entry-field-amount">
               <label>金額</label>
-              <input inputmode="numeric" value="${escapeAttr(item.amount)}" data-field="amount">
+              <input inputmode="numeric" value="${escapeAttr(formatAmountInput(item.amount))}" data-field="amount">
+            </div>
+            <div class="field entry-field-account">
+              <label>引落口座</label>
+              <input list="accountSuggestions" value="${escapeAttr(item.debitAccount)}" data-field="debitAccount">
             </div>
             <div class="field entry-field-period">
               <div class="entry-field-label-row">
                 <label>利用期間</label>
-                <button class="inline-action" type="button" data-action="previous-period-start" ${previousPeriodStart ? "" : "disabled"}>前回の翌日</button>
+                <div class="period-actions">
+                  <button class="inline-action" type="button" data-action="previous-period-start" ${previousPeriodStart ? "" : "disabled"}>前回の翌日</button>
+                  <button class="inline-action" type="button" data-action="full-month">1ヶ月分</button>
+                  <input class="period-month-input" type="month" value="${escapeAttr(periodMonthId)}" data-period-month aria-label="1ヶ月分の対象年月">
+                  <span class="full-month-summary">${escapeHtml(periodSummary)}</span>
+                </div>
               </div>
               <div class="usage-period-control">
                 <div class="usage-period-inputs">
@@ -1567,10 +1658,6 @@
             <div class="field entry-field-debit">
               <label>引落とし日</label>
               <input inputmode="numeric" maxlength="2" pattern="[0-9]*" value="${escapeAttr(debitDayLabel)}" data-field="debitDate">
-            </div>
-            <div class="field entry-field-used">
-              <label>利用日</label>
-              <input type="date" value="${escapeAttr(item.usedDate)}" data-field="usedDate">
             </div>
             <div class="field entry-field-note">
               <label>備考</label>
@@ -1592,6 +1679,17 @@
         persist();
         render();
       });
+      const periodMonthControl = article.querySelector("[data-period-month]");
+      const applyCardFullMonth = () => {
+        const range = fullMonthRange(periodMonthControl.value);
+        if (!range) return;
+        item.usagePeriodStart = range.start;
+        item.usagePeriodEnd = range.end;
+        persist();
+        render();
+      };
+      article.querySelector("[data-action='full-month']").addEventListener("click", applyCardFullMonth);
+      periodMonthControl.addEventListener("change", applyCardFullMonth);
       article.querySelectorAll("[data-field]").forEach(control => {
         const commitInlineEdit = () => {
           updateInlineField(item, control.dataset.field, control.value, monthId);
@@ -1600,6 +1698,9 @@
         };
         control.addEventListener("change", commitInlineEdit);
         control.addEventListener("blur", commitInlineEdit);
+        if (control.dataset.field === "amount") {
+          control.addEventListener("input", formatAmountControl);
+        }
       });
       return article;
     }
@@ -1636,6 +1737,10 @@
         if (text && debitDay === null) return;
         item.debitDay = debitDay;
         item.debitDate = debitDay ? dateFromMonthAndDay(monthId, debitDay) : "";
+        return;
+      }
+      if (field === "amount") {
+        item.amount = normalizeAmountValue(text);
         return;
       }
       item[field] = text;
@@ -1703,21 +1808,23 @@
     }
 
     function openMonthSheet() {
-      const currentYear = new Date().getFullYear();
-      const [activeYear, activeMonth] = currentMonth().id.split("-").map(Number);
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      const currentMonthNumber = today.getMonth() + 1;
       yearInput.innerHTML = "";
       monthInput.innerHTML = "";
       for (let year = currentYear - 3; year <= currentYear + 7; year += 1) {
-        yearInput.add(new Option(`${year}年`, String(year), false, year === activeYear));
+        yearInput.add(new Option(`${year}年`, String(year), false, year === currentYear));
       }
       for (let month = 1; month <= 12; month += 1) {
-        monthInput.add(new Option(`${month}月`, String(month), false, month === activeMonth));
+        monthInput.add(new Option(`${month}月`, String(month), false, month === currentMonthNumber));
       }
       monthError.textContent = "";
       monthError.classList.remove("show");
       monthSheet.classList.add("open");
       scrim.classList.add("open");
       monthSheet.setAttribute("aria-hidden", "false");
+      monthSheet.scrollTop = 0;
     }
 
     function closeMonthSheet() {
@@ -1774,18 +1881,20 @@
       paymentTypeInput.value = normalizePaymentType(item?.paymentType);
       paymentMethodInput.value = item?.paymentMethod || "";
       contentInput.value = item?.content || "";
-      amountInput.value = item?.amount || "";
-      usedDateInput.value = item?.usedDate || "";
+      amountInput.value = formatAmountInput(item?.amount);
       debitDateInput.value = item?.debitDate || "";
       billingCycleInput.value = String(normalizeBillingCycleMonths(item?.billingCycleMonths));
       usagePeriodStartInput.value = item?.usagePeriodStart || "";
       usagePeriodEndInput.value = item?.usagePeriodEnd || "";
+      sheetPeriodMonthInput.value = fullMonthIdForItem(item) || offsetMonthId(currentMonth().id, -1);
       noteInput.value = item?.note || "";
       syncPreviousPeriodButton(item);
+      syncSheetFullMonthSummary();
       syncPaymentMethodField();
       sheet.classList.add("open");
       scrim.classList.add("open");
       sheet.setAttribute("aria-hidden", "false");
+      sheet.scrollTop = 0;
       debitAccountInput.focus();
     }
 
@@ -1793,6 +1902,7 @@
       settingsSheet.classList.add("open");
       scrim.classList.add("open");
       settingsSheet.setAttribute("aria-hidden", "false");
+      settingsSheet.scrollTop = 0;
     }
 
     function closeSettingsSheet() {
@@ -1817,7 +1927,6 @@
       const debitAccount = debitAccountInput.value.trim();
       const paymentMethod = paymentType === "card" ? paymentMethodInput.value.trim() : "";
       const content = contentInput.value.trim();
-      const usedDate = normalizeDateValue(usedDateInput.value);
       const debitDate = normalizeDateValue(debitDateInput.value);
       const debitDay = dayFromDate(debitDate);
       const billingCycleMonths = normalizeBillingCycleMonths(billingCycleInput.value);
@@ -1845,7 +1954,6 @@
       }
 
       const invalidDateField = [
-        [usedDateInput, "利用日"],
         [debitDateInput, "引落とし日"],
         [usagePeriodStartInput, "利用期間 開始"],
         [usagePeriodEndInput, "利用期間 終了"]
@@ -1861,8 +1969,8 @@
         paymentType,
         paymentMethod,
         content,
-        amount: amountInput.value.trim(),
-        usedDate,
+        amount: normalizeAmountValue(amountInput.value),
+        usedDate: existingItem?.usedDate || "",
         debitDate,
         debitDay,
         billingCycleMonths,
@@ -1917,6 +2025,23 @@
       if (!start) return;
       usagePeriodStartInput.value = start;
       sheetPreviousPeriodButton.dataset.value = start;
+      syncSheetFullMonthSummary();
+    }
+
+    function applyFullMonthToSheet() {
+      const range = fullMonthRange(sheetPeriodMonthInput.value);
+      if (!range) return;
+      usagePeriodStartInput.value = range.start;
+      usagePeriodEndInput.value = range.end;
+      syncSheetFullMonthSummary();
+    }
+
+    function syncSheetFullMonthSummary() {
+      const temporaryItem = {
+        usagePeriodStart: usagePeriodStartInput.value,
+        usagePeriodEnd: usagePeriodEndInput.value
+      };
+      sheetFullMonthSummary.textContent = fullMonthLabel(temporaryItem);
     }
 
     function deleteEntry() {
@@ -2226,6 +2351,32 @@
 
     function toNumber(value) {
       return Number(String(value).replace(/[^\d.-]/g, "")) || 0;
+    }
+
+    function normalizeAmountValue(value) {
+      const digits = String(value ?? "").replace(/[^\d]/g, "");
+      if (!digits) return "";
+      return String(Number(digits));
+    }
+
+    function formatAmountInput(value) {
+      const normalized = normalizeAmountValue(value);
+      return normalized ? new Intl.NumberFormat("ja-JP").format(Number(normalized)) : "";
+    }
+
+    function formatAmountControl(event) {
+      const control = event.currentTarget;
+      const beforeCursor = control.value.slice(0, control.selectionStart ?? control.value.length);
+      const digitsBeforeCursor = beforeCursor.replace(/[^\d]/g, "").length;
+      const formatted = formatAmountInput(control.value);
+      control.value = formatted;
+      let cursor = 0;
+      let seenDigits = 0;
+      while (cursor < formatted.length && seenDigits < digitsBeforeCursor) {
+        if (/\d/.test(formatted[cursor])) seenDigits += 1;
+        cursor += 1;
+      }
+      control.setSelectionRange(cursor, cursor);
     }
 
     function formatAmount(value) {
