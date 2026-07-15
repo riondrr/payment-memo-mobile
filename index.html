@@ -167,7 +167,7 @@
 
     .month-navigation {
       display: grid;
-      grid-template-columns: 40px minmax(0, 1fr) 40px;
+      grid-template-columns: 72px minmax(0, 1fr) 72px;
       gap: 8px;
       padding: 10px 0 0;
     }
@@ -245,7 +245,7 @@
 
     .account-head {
       display: flex;
-      align-items: end;
+      align-items: center;
       justify-content: space-between;
       gap: 10px;
       padding: 7px 2px 5px;
@@ -254,6 +254,28 @@
 
     .account-title {
       min-width: 0;
+    }
+
+    .account-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+    }
+
+    .account-chevron {
+      flex: 0 0 auto;
+      color: var(--accent);
+      font-size: 18px;
+      transition: transform .18s ease;
+    }
+
+    .account-toggle[aria-expanded="false"] .account-chevron {
+      transform: rotate(-90deg);
     }
 
     .account-title strong {
@@ -283,6 +305,10 @@
     .account-items {
       display: grid;
       gap: 8px;
+    }
+
+    .account-items[hidden] {
+      display: none;
     }
 
     .entry {
@@ -322,10 +348,16 @@
       min-width: 0;
     }
 
-    .entry-title strong {
+    .entry-detail {
       display: block;
+      max-width: 100%;
+      padding: 0;
+      background: transparent;
+      color: var(--ink);
       font-size: 16px;
+      font-weight: 800;
       line-height: 1.25;
+      text-align: left;
       overflow-wrap: anywhere;
     }
 
@@ -373,18 +405,20 @@
       font-size: 11px;
     }
 
-    .amount {
-      min-width: 84px;
-      max-width: 118px;
+    .amount-input {
+      width: 112px;
+      min-width: 0;
+      height: 36px;
       border: 1px solid #d9ede9;
-      border-radius: 999px;
+      border-radius: 8px;
       background: #f2faf8;
       padding: 5px 10px;
+      outline-color: var(--accent);
       text-align: right;
       color: var(--accent);
+      font: inherit;
       font-weight: 800;
       font-variant-numeric: tabular-nums;
-      overflow-wrap: anywhere;
     }
 
     .entry-fields {
@@ -541,14 +575,9 @@
       min-height: var(--entry-control-height);
     }
 
-    .entry-field-amount input,
     .entry-field-debit input,
     .entry-field-period input {
       text-align: right;
-    }
-
-    .entry-field-amount {
-      grid-column: span 3;
     }
 
     .entry-field-debit {
@@ -771,15 +800,14 @@
         grid-template-columns: 1fr;
       }
 
-      .entry-field-amount,
       .entry-field-period,
       .entry-field-debit,
       .entry-field-note {
         grid-column: 1 / -1;
       }
 
-      .amount {
-        min-width: 68px;
+      .amount-input {
+        width: 92px;
       }
     }
   </style>
@@ -975,6 +1003,7 @@
     let activeStateSource = "anonymous";
     const state = loadState(activeStorageKey);
     let editingId = null;
+    const collapsedAccountGroups = new Set();
     let supabaseClient = null;
     let currentSession = null;
     let syncTimer = null;
@@ -1503,10 +1532,11 @@
 
       const nextButton = document.createElement("button");
       nextButton.type = "button";
-      nextButton.textContent = "›";
-      nextButton.title = "次の月";
-      nextButton.setAttribute("aria-label", "次の月");
-      nextButton.disabled = activeIndex < 0 || activeIndex >= sortedMonths.length - 1;
+      const isLatestMonth = activeIndex === sortedMonths.length - 1;
+      nextButton.textContent = isLatestMonth ? "月を追加" : "›";
+      nextButton.title = isLatestMonth ? "月を追加" : "次の月";
+      nextButton.setAttribute("aria-label", isLatestMonth ? "月を追加" : "次の月");
+      nextButton.disabled = activeIndex < 0;
 
       const selectMonth = id => {
         if (!id) return;
@@ -1515,7 +1545,13 @@
         render();
       };
       previousButton.addEventListener("click", () => selectMonth(sortedMonths[activeIndex - 1]?.id));
-      nextButton.addEventListener("click", () => selectMonth(sortedMonths[activeIndex + 1]?.id));
+      nextButton.addEventListener("click", () => {
+        if (isLatestMonth) {
+          openMonthSheet();
+          return;
+        }
+        selectMonth(sortedMonths[activeIndex + 1]?.id);
+      });
       monthSelect.addEventListener("change", () => selectMonth(monthSelect.value));
       tabs.append(previousButton, monthSelect, nextButton);
     }
@@ -1540,21 +1576,36 @@
       accountGroups.forEach(group => {
         const section = document.createElement("section");
         section.className = "account-group";
+        const groupKey = `${month.id}\u0000${group.account}`;
+        const isCollapsed = collapsedAccountGroups.has(groupKey);
         const groupSum = group.items.reduce((acc, item) => acc + toNumber(item.amount), 0);
         const groupPaid = group.items.filter(item => item.paid).length;
         section.innerHTML = `
           <div class="account-head">
-            <div class="account-title">
-              <strong>${escapeHtml(group.account)}</strong>
-              <span>支払い済み ${groupPaid} / ${group.items.length}</span>
-            </div>
+            <button class="account-toggle" type="button" aria-expanded="${String(!isCollapsed)}">
+              <span class="account-chevron" aria-hidden="true">⌄</span>
+              <span class="account-title">
+                <strong>${escapeHtml(group.account)}</strong>
+                <span>支払い済み ${groupPaid} / ${group.items.length}</span>
+              </span>
+            </button>
             <div class="account-total">${formatAmount(groupSum)}</div>
           </div>
-          <div class="account-items"></div>
+          <div class="account-items" ${isCollapsed ? "hidden" : ""}></div>
         `;
 
         const accountItems = section.querySelector(".account-items");
         group.items.forEach(item => accountItems.appendChild(renderEntryCard(item, month.id)));
+        section.querySelector(".account-toggle").addEventListener("click", event => {
+          const collapsed = !accountItems.hidden;
+          accountItems.hidden = collapsed;
+          event.currentTarget.setAttribute("aria-expanded", String(!collapsed));
+          if (collapsed) {
+            collapsedAccountGroups.add(groupKey);
+          } else {
+            collapsedAccountGroups.delete(groupKey);
+          }
+        });
         list.appendChild(section);
       });
     }
@@ -1575,19 +1626,15 @@
           <div class="entry-main">
             <button class="check" type="button" title="支払い済み" aria-label="支払い済み">${item.paid ? "✓" : ""}</button>
             <div class="entry-title">
-              <strong>${escapeHtml(item.content || "内容未設定")}</strong>
+              <button class="entry-detail" type="button" title="詳細を編集">${escapeHtml(item.content || "内容未設定")}</button>
               <div class="entry-meta">
                 <span class="payment-source ${paymentType === "card" ? "card" : "direct"}">${escapeHtml(paymentSourceLabel)}</span>
                 ${billingCycleMonths > 1 ? `<span class="billing-cycle">${billingCycleLabel(billingCycleMonths)}</span>` : ""}
               </div>
             </div>
-            <button class="amount" type="button" title="詳細と削除" aria-label="詳細と削除">${formatAmount(item.amount)}</button>
+            <input class="amount-input" inputmode="numeric" value="${escapeAttr(formatAmountInput(item.amount))}" data-field="amount" aria-label="${escapeAttr(item.content || "明細")}の金額">
           </div>
           <div class="entry-fields">
-            <div class="field entry-field-amount">
-              <label>金額</label>
-              <input inputmode="numeric" value="${escapeAttr(formatAmountInput(item.amount))}" data-field="amount">
-            </div>
             <div class="field entry-field-period">
               <div class="entry-field-label-row">
                 <label>利用期間</label>
@@ -1598,9 +1645,9 @@
               </div>
               <div class="usage-period-control">
                 <div class="usage-period-inputs">
-                  <input value="${escapeAttr(usagePeriodStartLabel)}" placeholder="MM/DD" data-field="usagePeriodStart" aria-label="利用期間 開始">
+                  <input inputmode="numeric" maxlength="5" value="${escapeAttr(usagePeriodStartLabel)}" placeholder="月/日" data-field="usagePeriodStart" data-month-day aria-label="利用期間 開始">
                   <span class="usage-period-separator">〜</span>
-                  <input value="${escapeAttr(usagePeriodEndLabel)}" placeholder="MM/DD" data-field="usagePeriodEnd" aria-label="利用期間 終了">
+                  <input inputmode="numeric" maxlength="5" value="${escapeAttr(usagePeriodEndLabel)}" placeholder="月/日" data-field="usagePeriodEnd" data-month-day aria-label="利用期間 終了">
                 </div>
               </div>
             </div>
@@ -1620,7 +1667,7 @@
         persist();
         render();
       });
-      article.querySelector(".amount").addEventListener("click", () => openSheet(item.id));
+      article.querySelector(".entry-detail").addEventListener("click", () => openSheet(item.id));
       article.querySelector("[data-action='previous-period-start']").addEventListener("click", () => {
         const start = previousUsagePeriodStart(item, monthId);
         if (!start) return;
@@ -1647,6 +1694,9 @@
         control.addEventListener("blur", commitInlineEdit);
         if (control.dataset.field === "amount") {
           control.addEventListener("input", formatAmountControl);
+        }
+        if (control.hasAttribute("data-month-day")) {
+          control.addEventListener("input", formatMonthDayControl);
         }
       });
       return article;
@@ -2311,6 +2361,24 @@
         if (/\d/.test(formatted[cursor])) seenDigits += 1;
         cursor += 1;
       }
+      control.setSelectionRange(cursor, cursor);
+    }
+
+    function formatMonthDayControl(event) {
+      const control = event.currentTarget;
+      const raw = control.value.replace(/[^\d/]/g, "");
+      if (raw.includes("/")) {
+        const [month = "", day = ""] = raw.split("/");
+        const monthDigits = month.replace(/\D/g, "").slice(0, 2);
+        const dayDigits = day.replace(/\D/g, "").slice(0, 2);
+        control.value = `${monthDigits}/${dayDigits}`;
+      } else {
+        const digits = raw.replace(/\D/g, "").slice(0, 4);
+        control.value = digits.length > 2
+          ? `${digits.slice(0, 2)}/${digits.slice(2)}`
+          : digits;
+      }
+      const cursor = control.value.length;
       control.setSelectionRange(cursor, cursor);
     }
 
