@@ -4,16 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="index,follow">
+  <meta name="theme-color" content="#f8fcff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#080d12" media="(prefers-color-scheme: dark)">
   <title>プライバシーポリシー | 口座別引落 月別管理</title>
   <style>
     :root {
-      color-scheme: light;
+      color-scheme: light dark;
       --paper: #fbfaf7;
       --ink: #24211c;
       --muted: #746d63;
       --line: #ded7cb;
       --panel: #fffdf9;
-      --accent: #1d6f68;
+      --accent: #1976b9;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
@@ -23,7 +25,7 @@
 
     body {
       margin: 0;
-      background: linear-gradient(180deg, #f7f3eb 0%, #fdfcf9 45%, #eef4f2 100%);
+      background: linear-gradient(180deg, #f8fcff 0%, #ffffff 45%, #edf7fd 100%);
       color: var(--ink);
       line-height: 1.75;
     }
@@ -94,6 +96,27 @@
       color: var(--ink);
       padding: 0 14px;
       text-decoration: none;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #080d12;
+        --ink: #f1f6f9;
+        --muted: #9eacb7;
+        --line: #2b3a46;
+        --panel: #111a22;
+        --accent: #55b8f3;
+      }
+
+      body {
+        background: linear-gradient(180deg, #080d12 0%, #0c141b 45%, #0a1117 100%);
+      }
+
+      .panel,
+      .back {
+        border-color: #394b58;
+        background: var(--panel);
+      }
     }
   </style>
 </head>
