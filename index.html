@@ -506,6 +506,12 @@
       font-weight: 800;
     }
 
+    .entry-actions {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
     .custom-cycle-control {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -731,8 +737,12 @@
       font-size: 11px;
     }
 
+    .entry-field-paid {
+      grid-column: span 3;
+    }
+
     .entry-field-note {
-      grid-column: span 8;
+      grid-column: span 5;
     }
 
     .period-actions {
@@ -781,6 +791,7 @@
       max-height: 92vh;
       max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top)));
       overflow-y: auto;
+      overflow-x: hidden;
       overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
       transform: translateY(110%);
@@ -801,6 +812,138 @@
       margin: 0 auto;
       display: grid;
       gap: 12px;
+      min-width: 0;
+    }
+
+    .view-toggle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 12px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+    }
+
+    .view-toggle button {
+      min-height: 38px;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .view-toggle button.active {
+      background: var(--accent);
+      color: white;
+    }
+
+    .calendar {
+      display: grid;
+      gap: 8px;
+    }
+
+    .calendar[hidden] {
+      display: none;
+    }
+
+    .calendar-weekdays,
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 4px;
+    }
+
+    .calendar-weekdays span {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .calendar-day {
+      min-width: 0;
+      min-height: 84px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--ink);
+      padding: 5px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .calendar-day.outside {
+      visibility: hidden;
+    }
+
+    .calendar-day.today {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
+    .calendar-date-number {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .calendar-event {
+      display: block;
+      width: 100%;
+      margin-top: 3px;
+      overflow: hidden;
+      border-radius: 5px;
+      padding: 3px 4px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 9px;
+      font-weight: 800;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .calendar-event.paid {
+      background: #e8f6ef;
+      color: #27704d;
+    }
+
+    .calendar-event.both {
+      background: #e7f2ff;
+      color: #315e9c;
+    }
+
+    .trash-list,
+    .day-detail-list {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .trash-item,
+    .day-detail-item {
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 11px;
+    }
+
+    .trash-item-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .trash-item button,
+    .day-detail-item button {
+      min-height: 38px;
+      border-radius: 8px;
+      font-weight: 800;
     }
 
     .sheet-head {
@@ -1067,12 +1210,18 @@
 
       .entry-field-period,
       .entry-field-debit,
+      .entry-field-paid,
       .entry-field-note {
         grid-column: 1 / -1;
       }
 
       .amount-input {
         width: 92px;
+      }
+
+      .calendar-day {
+        min-height: 70px;
+        padding: 4px;
       }
     }
   </style>
@@ -1110,20 +1259,28 @@
       <h2 id="monthTitle"></h2>
       <div class="compact-actions">
         <button class="soft-button" id="reorderButton" type="button" aria-pressed="false">並び替え</button>
+        <button class="soft-button" id="trashButton" type="button">最近削除</button>
         <button class="soft-button" id="addMonthButton" type="button">月を追加</button>
         <button class="soft-button" id="addEntryButton" type="button">支払い方法を追加</button>
       </div>
     </section>
 
-    <section class="monthly-table-panel" aria-label="月の内容と金額">
-      <button class="monthly-table-toggle" id="monthlyTableToggle" type="button" aria-expanded="false" aria-controls="monthlyTableWrap">
-        <span>内容・金額一覧</span>
-        <span class="monthly-table-chevron" aria-hidden="true">⌄</span>
-      </button>
-      <div class="monthly-table-wrap" id="monthlyTableWrap" hidden></div>
-    </section>
+    <div class="view-toggle" role="tablist" aria-label="表示切替">
+      <button class="active" id="listViewButton" type="button" role="tab" aria-selected="true">一覧</button>
+      <button id="calendarViewButton" type="button" role="tab" aria-selected="false">カレンダー</button>
+    </div>
 
-    <section class="list" id="entryList" aria-live="polite"></section>
+    <div id="listView">
+      <section class="monthly-table-panel" aria-label="月の内容と金額">
+        <button class="monthly-table-toggle" id="monthlyTableToggle" type="button" aria-expanded="false" aria-controls="monthlyTableWrap">
+          <span>内容・金額一覧</span>
+          <span class="monthly-table-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div class="monthly-table-wrap" id="monthlyTableWrap" hidden></div>
+      </section>
+      <section class="list" id="entryList" aria-live="polite"></section>
+    </div>
+    <section class="calendar" id="calendarView" aria-label="支払いカレンダー" hidden></section>
     <aside class="ad-slot" id="adSlot" aria-label="広告"></aside>
   </main>
 
@@ -1137,8 +1294,11 @@
       </div>
       <div class="field">
         <label for="debitAccountInput">引落口座</label>
-        <input id="debitAccountInput" list="accountSuggestions" required>
-        <datalist id="accountSuggestions"></datalist>
+        <select id="debitAccountInput" required></select>
+      </div>
+      <div class="field" id="customDebitAccountField" hidden>
+        <label for="customDebitAccountInput">新しい引落口座</label>
+        <input id="customDebitAccountInput" placeholder="口座名を入力">
       </div>
       <div class="field">
         <label for="paymentTypeInput">支払い種別</label>
@@ -1154,14 +1314,6 @@
       <div class="field">
         <label for="contentInput">内容</label>
         <input id="contentInput" required>
-      </div>
-      <div class="field">
-        <label for="amountInput">金額</label>
-        <input id="amountInput" inputmode="numeric" placeholder="0">
-      </div>
-      <div class="field">
-        <label for="debitDateInput">引落とし日</label>
-        <input id="debitDateInput" type="date">
       </div>
       <div class="field">
         <label for="billingCycleInput">支払い周期</label>
@@ -1182,20 +1334,6 @@
         </div>
       </div>
       <div class="field">
-        <label for="usagePeriodStartInput">利用期間</label>
-        <div class="usage-period-control">
-          <div class="usage-period-inputs">
-            <input id="usagePeriodStartInput" type="date" aria-label="利用期間 開始">
-            <span class="usage-period-separator">〜</span>
-            <input id="usagePeriodEndInput" type="date" aria-label="利用期間 終了">
-          </div>
-          <div class="period-actions">
-            <button class="inline-action" id="sheetPreviousPeriodButton" type="button">続きの1ヶ月</button>
-            <button class="inline-action" id="sheetFullMonthButton" type="button">直前1ヶ月まるごと</button>
-          </div>
-        </div>
-      </div>
-      <div class="field">
         <label for="noteInput">備考</label>
         <textarea id="noteInput"></textarea>
       </div>
@@ -1203,6 +1341,21 @@
       <button class="primary" type="submit">保存</button>
       <button class="danger" id="deleteEntryButton" type="button">削除</button>
     </form>
+  </aside>
+  <aside class="sheet" id="trashSheet" aria-hidden="true">
+    <div class="sheet-head">
+      <h2>最近削除した項目</h2>
+      <button class="icon-button" id="closeTrashSheetButton" type="button" aria-label="最近削除を閉じる">×</button>
+    </div>
+    <p class="form-error" id="trashError" role="alert"></p>
+    <div class="trash-list" id="trashList"></div>
+  </aside>
+  <aside class="sheet" id="daySheet" aria-hidden="true">
+    <div class="sheet-head">
+      <h2 id="daySheetTitle">日付の詳細</h2>
+      <button class="icon-button" id="closeDaySheetButton" type="button" aria-label="日付詳細を閉じる">×</button>
+    </div>
+    <div class="day-detail-list" id="dayDetailList"></div>
   </aside>
   <aside class="sheet" id="monthSheet" aria-hidden="true">
     <form id="monthForm">
@@ -1261,6 +1414,7 @@
     const seed = {
       activeMonth: "2026-05",
       sortOrder: { accounts: [], series: [] },
+      trash: [],
       months: [
         {
           id: "2026-05",
@@ -1288,6 +1442,7 @@
     let editingId = null;
     let reorderMode = false;
     let dragState = null;
+    let activeView = "list";
     const collapsedAccountGroups = new Set();
     const expandedMonthlyTables = new Set();
     let supabaseClient = null;
@@ -1303,9 +1458,20 @@
     const paidCount = document.getElementById("paidCount");
     const searchInput = document.getElementById("searchInput");
     const reorderButton = document.getElementById("reorderButton");
+    const trashButton = document.getElementById("trashButton");
+    const listView = document.getElementById("listView");
+    const calendarView = document.getElementById("calendarView");
+    const listViewButton = document.getElementById("listViewButton");
+    const calendarViewButton = document.getElementById("calendarViewButton");
     const sheet = document.getElementById("entrySheet");
     const monthSheet = document.getElementById("monthSheet");
     const settingsSheet = document.getElementById("settingsSheet");
+    const trashSheet = document.getElementById("trashSheet");
+    const daySheet = document.getElementById("daySheet");
+    const trashList = document.getElementById("trashList");
+    const trashError = document.getElementById("trashError");
+    const daySheetTitle = document.getElementById("daySheetTitle");
+    const dayDetailList = document.getElementById("dayDetailList");
     const scrim = document.getElementById("scrim");
     const form = document.getElementById("entryForm");
     const monthForm = document.getElementById("monthForm");
@@ -1320,31 +1486,31 @@
     const signOutButton = document.getElementById("signOutButton");
     const syncNowButton = document.getElementById("syncNowButton");
     const debitAccountInput = document.getElementById("debitAccountInput");
+    const customDebitAccountField = document.getElementById("customDebitAccountField");
+    const customDebitAccountInput = document.getElementById("customDebitAccountInput");
     const paymentTypeInput = document.getElementById("paymentTypeInput");
     const paymentMethodField = document.getElementById("paymentMethodField");
     const paymentMethodInput = document.getElementById("paymentMethodInput");
     const contentInput = document.getElementById("contentInput");
-    const amountInput = document.getElementById("amountInput");
-    const debitDateInput = document.getElementById("debitDateInput");
     const billingCycleInput = document.getElementById("billingCycleInput");
     const customBillingCycleField = document.getElementById("customBillingCycleField");
     const customBillingCycleInput = document.getElementById("customBillingCycleInput");
-    const usagePeriodStartInput = document.getElementById("usagePeriodStartInput");
-    const usagePeriodEndInput = document.getElementById("usagePeriodEndInput");
-    const sheetPreviousPeriodButton = document.getElementById("sheetPreviousPeriodButton");
-    const sheetFullMonthButton = document.getElementById("sheetFullMonthButton");
     const noteInput = document.getElementById("noteInput");
     const entryError = document.getElementById("entryError");
-    const accountSuggestions = document.getElementById("accountSuggestions");
     const adSlot = document.getElementById("adSlot");
 
     document.getElementById("addEntryButton").addEventListener("click", () => openSheet());
     document.getElementById("addMonthButton").addEventListener("click", openMonthSheet);
     reorderButton.addEventListener("click", toggleReorderMode);
+    trashButton.addEventListener("click", openTrashSheet);
+    listViewButton.addEventListener("click", () => setActiveView("list"));
+    calendarViewButton.addEventListener("click", () => setActiveView("calendar"));
     document.getElementById("settingsButton").addEventListener("click", openSettingsSheet);
     document.getElementById("closeSheetButton").addEventListener("click", closeSheet);
     document.getElementById("closeMonthSheetButton").addEventListener("click", closeMonthSheet);
     document.getElementById("closeSettingsSheetButton").addEventListener("click", closeSettingsSheet);
+    document.getElementById("closeTrashSheetButton").addEventListener("click", closeTrashSheet);
+    document.getElementById("closeDaySheetButton").addEventListener("click", closeDaySheet);
     document.getElementById("exportButton").addEventListener("click", exportJson);
     document.getElementById("importButton").addEventListener("click", () => importInput.click());
     importInput.addEventListener("change", importJson);
@@ -1357,12 +1523,9 @@
     monthForm.addEventListener("submit", addSelectedMonth);
     deleteButton.addEventListener("click", deleteEntry);
     paymentTypeInput.addEventListener("change", syncPaymentMethodField);
+    debitAccountInput.addEventListener("change", syncDebitAccountField);
     billingCycleInput.addEventListener("change", syncBillingCycleField);
-    customBillingCycleInput.addEventListener("input", syncSheetPeriodButtonLabel);
     monthlyTableToggle.addEventListener("click", toggleMonthlyTable);
-    sheetPreviousPeriodButton.addEventListener("click", applyPreviousPeriodRangeToSheet);
-    sheetFullMonthButton.addEventListener("click", applyFullMonthToSheet);
-    amountInput.addEventListener("input", formatAmountControl);
     signInButton.addEventListener("click", sendMagicLink);
     signOutButton.addEventListener("click", signOut);
     syncNowButton.addEventListener("click", () => syncState());
@@ -1393,7 +1556,8 @@
     }
 
     function persist(options = {}) {
-      state.sortOrder = normalizeSortOrder(state.sortOrder, state.months);
+      state.trash = normalizeTrash(state.trash);
+      state.sortOrder = normalizeSortOrder(state.sortOrder, state.months, state.trash);
       if (!options.keepUpdatedAt) {
         state.updatedAt = new Date().toISOString();
       }
@@ -1409,13 +1573,27 @@
       normalized.months = Array.isArray(normalized.months) && normalized.months.length
         ? normalized.months.map(normalizeMonth)
         : structuredClone(seed.months).map(normalizeMonth);
-      normalized.sortOrder = normalizeSortOrder(normalized.sortOrder, normalized.months);
+      normalized.trash = normalizeTrash(normalized.trash);
+      normalized.sortOrder = normalizeSortOrder(normalized.sortOrder, normalized.months, normalized.trash);
       normalized.activeMonth = normalized.months.some(month => month.id === normalized.activeMonth)
         ? normalized.activeMonth
         : normalized.months[0]?.id || seed.activeMonth;
       normalized.updatedAt = normalized.updatedAt || new Date().toISOString();
-      normalized.schemaVersion = 8;
+      normalized.schemaVersion = 9;
       return normalized;
+    }
+
+    function normalizeTrash(value) {
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      return (Array.isArray(value) ? value : [])
+        .filter(entry => entry && new Date(entry.deletedAt).getTime() >= cutoff)
+        .map(entry => ({
+          id: String(entry.id || crypto.randomUUID()),
+          deletedAt: entry.deletedAt,
+          monthId: String(entry.monthId || ""),
+          monthLabel: String(entry.monthLabel || formatMonthLabel(entry.monthId)),
+          item: normalizeItem(entry.item, entry.monthId)
+        }));
     }
 
     function normalizeMonth(month) {
@@ -1444,7 +1622,7 @@
     function mergeDuplicateItem(target, duplicate) {
       [
         "debitAccount", "paymentMethod", "content", "amount", "usedDate", "debitDate",
-        "debitDay", "billingStartMonth", "usagePeriodStart", "usagePeriodEnd", "note"
+        "debitDay", "billingStartMonth", "usagePeriodStart", "usagePeriodEnd", "paidDate", "note"
       ].forEach(field => {
         if ((target[field] === "" || target[field] === null || target[field] === undefined) &&
             duplicate[field] !== "" && duplicate[field] !== null && duplicate[field] !== undefined) {
@@ -1455,13 +1633,17 @@
       return target;
     }
 
-    function normalizeSortOrder(value, months) {
+    function normalizeSortOrder(value, months, trash = []) {
       const knownAccounts = [];
       const knownSeries = [];
       months.forEach(month => month.items.forEach(item => {
         pushUnique(knownAccounts, item.debitAccount || unassignedAccount);
         pushUnique(knownSeries, item.seriesId || item.id);
       }));
+      trash.forEach(entry => {
+        pushUnique(knownAccounts, entry.item.debitAccount || unassignedAccount);
+        pushUnique(knownSeries, entry.item.seriesId || entry.item.id);
+      });
       return {
         accounts: normalizeOrderList(value?.accounts, knownAccounts),
         series: normalizeOrderList(value?.series, knownSeries)
@@ -1493,6 +1675,7 @@
       const usedDate = normalizeDateValue(item?.usedDate);
       const usagePeriodStart = normalizeDateValue(item?.usagePeriodStart);
       const usagePeriodEnd = normalizeDateValue(item?.usagePeriodEnd);
+      const paidDate = normalizeDateValue(item?.paidDate);
       const hasAccountModel = "debitAccount" in Object(item) ||
         "paymentType" in Object(item) ||
         "paymentMethod" in Object(item);
@@ -1515,6 +1698,7 @@
           billingStartMonth,
           usagePeriodStart,
           usagePeriodEnd,
+          paidDate,
           note: String(item.note || "").trim(),
           paid: Boolean(item.paid)
         };
@@ -1537,6 +1721,7 @@
         billingStartMonth,
         usagePeriodStart,
         usagePeriodEnd,
+        paidDate,
         note: String(item?.note || "").trim(),
         paid: Boolean(item?.paid)
       };
@@ -1730,8 +1915,12 @@
     }
 
     function previousUsagePeriodEnd(item, monthId) {
+      return normalizeDateValue(previousSeriesItem(item, monthId)?.usagePeriodEnd);
+    }
+
+    function previousSeriesItem(item, monthId) {
       const seriesId = String(item?.seriesId || "").trim();
-      if (!seriesId) return "";
+      if (!seriesId) return null;
       const targetIndex = monthIndex(monthId);
       const previousMonths = state.months
         .slice()
@@ -1740,10 +1929,15 @@
 
       for (const month of previousMonths) {
         const previousItem = month.items.find(entry => String(entry.seriesId || "") === seriesId);
-        const end = normalizeDateValue(previousItem?.usagePeriodEnd);
-        if (end) return end;
+        if (previousItem) return previousItem;
       }
-      return "";
+      return null;
+    }
+
+    function previousDebitDate(item, monthId) {
+      const previous = previousSeriesItem(item, monthId);
+      const day = dayFromDate(previous?.debitDate) || normalizeDebitDay(previous?.debitDay);
+      return day ? dateFromMonthAndDay(monthId, day) : "";
     }
 
     function previousUsagePeriodStart(item, monthId) {
@@ -1819,10 +2013,13 @@
       return diff >= 0 && diff % cycle === 0;
     }
 
-    function copyItemForMonth(item, targetMonthId) {
+    function copyItemForMonth(item, targetMonthId, sourceMonthId = "") {
       const cycle = normalizeBillingCycleMonths(item.billingCycleMonths);
       const debitDay = dayFromDate(item.debitDate) || normalizeDebitDay(item.debitDay);
-      const usagePeriodStart = addDaysToDate(item.usagePeriodEnd, 1);
+      const sourceFullRange = sourceMonthId ? fullCycleRange(sourceMonthId, cycle) : null;
+      const targetFullRange = fullCycleRange(targetMonthId, cycle);
+      const usedFullRange = sourceFullRange &&
+        item.usagePeriodStart === sourceFullRange.start && item.usagePeriodEnd === sourceFullRange.end;
       return {
         id: crypto.randomUUID(),
         seriesId: item.seriesId || item.id || crypto.randomUUID(),
@@ -1836,8 +2033,9 @@
         debitDay,
         billingCycleMonths: cycle,
         billingStartMonth: normalizeBillingStartMonth(item.billingStartMonth, targetMonthId),
-        usagePeriodStart,
-        usagePeriodEnd: "",
+        usagePeriodStart: usedFullRange ? targetFullRange.start : addDaysToDate(item.usagePeriodEnd, 1),
+        usagePeriodEnd: usedFullRange ? targetFullRange.end : "",
+        paidDate: "",
         note: "",
         paid: false
       };
@@ -1851,20 +2049,50 @@
         .forEach(month => {
           month.items.forEach(item => {
             const normalized = normalizeItem(item, month.id);
-            latestBySeries.set(normalized.seriesId, normalized);
+            latestBySeries.set(normalized.seriesId, { item: normalized, sourceMonthId: month.id });
           });
         });
 
       const signatures = new Set();
       return Array.from(latestBySeries.values())
-        .filter(item => isBillingDueInMonth(item, targetMonthId))
+        .filter(entry => isBillingDueInMonth(entry.item, targetMonthId))
+        .filter(entry => {
+          const signature = automaticCopySignature(entry.item);
+          if (signatures.has(signature)) return false;
+          signatures.add(signature);
+          return true;
+        })
+        .map(entry => copyItemForMonth(entry.item, targetMonthId, entry.sourceMonthId));
+    }
+
+    function itemsForPreviousMonth(targetMonthId, sourceMonth) {
+      const signatures = new Set();
+      const latestBySeries = new Map();
+      state.months.slice().sort((a, b) => a.id.localeCompare(b.id)).forEach(month => {
+        month.items.forEach(item => {
+          const normalized = normalizeItem(item, month.id);
+          latestBySeries.set(normalized.seriesId, normalized);
+        });
+      });
+      return Array.from(latestBySeries.values())
+        .filter(item => {
+          const cycle = normalizeBillingCycleMonths(item.billingCycleMonths);
+          const startMonth = normalizeBillingStartMonth(item.billingStartMonth, sourceMonth.id);
+          return (monthIndex(targetMonthId) - monthIndex(startMonth)) % cycle === 0;
+        })
         .filter(item => {
           const signature = automaticCopySignature(item);
           if (signatures.has(signature)) return false;
           signatures.add(signature);
           return true;
         })
-        .map(item => copyItemForMonth(item, targetMonthId));
+        .map(item => {
+          const copied = copyItemForMonth(item, targetMonthId);
+          copied.usagePeriodStart = "";
+          copied.usagePeriodEnd = "";
+          copied.paidDate = "";
+          return copied;
+        });
     }
 
     function automaticCopySignature(item) {
@@ -1916,12 +2144,148 @@
     }
 
     function render() {
-      state.sortOrder = normalizeSortOrder(state.sortOrder, state.months);
+      state.trash = normalizeTrash(state.trash);
+      state.sortOrder = normalizeSortOrder(state.sortOrder, state.months, state.trash);
       renderTabs();
       renderAccountSuggestions();
       renderMonthlyTable();
       renderEntries();
+      renderView();
+      renderCalendar();
+      trashButton.textContent = state.trash.length ? `最近削除 (${state.trash.length})` : "最近削除";
       renderSummary();
+    }
+
+    function setActiveView(view) {
+      activeView = view === "calendar" ? "calendar" : "list";
+      reorderMode = false;
+      render();
+    }
+
+    function renderView() {
+      const isCalendar = activeView === "calendar";
+      listView.hidden = isCalendar;
+      calendarView.hidden = !isCalendar;
+      listViewButton.classList.toggle("active", !isCalendar);
+      calendarViewButton.classList.toggle("active", isCalendar);
+      listViewButton.setAttribute("aria-selected", String(!isCalendar));
+      calendarViewButton.setAttribute("aria-selected", String(isCalendar));
+      reorderButton.disabled = isCalendar || Boolean(searchInput.value.trim());
+    }
+
+    function calendarEvents(monthId) {
+      const eventsByDate = new Map();
+      const addEvent = (date, sourceMonth, item, type) => {
+        if (!date || !date.startsWith(`${monthId}-`)) return;
+        if (!eventsByDate.has(date)) eventsByDate.set(date, new Map());
+        const key = `${sourceMonth.id}\u0000${item.id}`;
+        const events = eventsByDate.get(date);
+        const event = events.get(key) || { sourceMonth, item, planned: false, paid: false };
+        event[type] = true;
+        events.set(key, event);
+      };
+      state.months.forEach(sourceMonth => sourceMonth.items.forEach(item => {
+        addEvent(normalizeDateValue(item.debitDate), sourceMonth, item, "planned");
+        addEvent(normalizeDateValue(item.paidDate), sourceMonth, item, "paid");
+      }));
+      return new Map(Array.from(eventsByDate, ([date, events]) => [date, Array.from(events.values())]));
+    }
+
+    function renderCalendar() {
+      const monthId = currentMonth().id;
+      const [year, month] = monthId.split("-").map(Number);
+      const firstWeekday = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
+      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      const today = localDateValue(new Date());
+      const events = calendarEvents(monthId);
+      calendarView.innerHTML = `
+        <div class="calendar-weekdays" aria-hidden="true">
+          ${["日", "月", "火", "水", "木", "金", "土"].map(day => `<span>${day}</span>`).join("")}
+        </div>
+        <div class="calendar-grid"></div>`;
+      const grid = calendarView.querySelector(".calendar-grid");
+      for (let index = 0; index < firstWeekday; index += 1) {
+        const blank = document.createElement("div");
+        blank.className = "calendar-day outside";
+        grid.appendChild(blank);
+      }
+      for (let day = 1; day <= lastDay; day += 1) {
+        const date = `${monthId}-${String(day).padStart(2, "0")}`;
+        const dayEvents = events.get(date) || [];
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `calendar-day${date === today ? " today" : ""}`;
+        button.setAttribute("aria-label", `${formatDateLabel(date)} ${dayEvents.length}件`);
+        const eventMarkup = dayEvents.slice(0, 3).map(event => {
+          const eventClass = event.planned && event.paid ? "both" : event.paid ? "paid" : "planned";
+          const suffix = event.planned && event.paid ? " 予定・支払済" : event.paid ? " 支払済" : " 予定";
+          return `<span class="calendar-event ${eventClass}">${escapeHtml(event.item.content || "明細")}${suffix}</span>`;
+        }).join("");
+        button.innerHTML = `<span class="calendar-date-number">${day}</span>${eventMarkup}${dayEvents.length > 3 ? `<span class="calendar-event">ほか${dayEvents.length - 3}件</span>` : ""}`;
+        button.addEventListener("click", () => openDaySheet(date));
+        grid.appendChild(button);
+      }
+    }
+
+    function localDateValue(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function openDaySheet(date) {
+      daySheet.dataset.date = date;
+      daySheetTitle.textContent = `${formatDateLabel(date)}の支払い`;
+      renderDayDetails(date);
+      daySheet.classList.add("open");
+      scrim.classList.add("open");
+      daySheet.setAttribute("aria-hidden", "false");
+      daySheet.scrollTop = 0;
+    }
+
+    function closeDaySheet() {
+      daySheet.classList.remove("open");
+      scrim.classList.remove("open");
+      daySheet.setAttribute("aria-hidden", "true");
+      delete daySheet.dataset.date;
+    }
+
+    function renderDayDetails(date) {
+      const events = calendarEvents(date.slice(0, 7)).get(date) || [];
+      dayDetailList.innerHTML = "";
+      if (!events.length) {
+        dayDetailList.innerHTML = '<div class="empty">この日の予定・実績はありません</div>';
+        return;
+      }
+      events.forEach(event => {
+        const element = document.createElement("div");
+        element.className = "day-detail-item";
+        element.innerHTML = `
+          <strong>${escapeHtml(event.item.content || "内容未設定")}</strong>
+          <span>${escapeHtml(event.sourceMonth.label)}・${escapeHtml(event.item.debitAccount || unassignedAccount)}</span>
+          <span>${event.planned ? "引落予定" : ""}${event.planned && event.paid ? "・" : ""}${event.paid ? "支払実績" : ""}</span>
+          <div class="field">
+            <label>支払実績日</label>
+            <input type="date" value="${escapeAttr(event.item.paidDate || "")}" data-day-field="paidDate">
+          </div>
+          <button class="secondary" type="button" data-day-action="paid">${event.item.paid ? "未払いに戻す" : "支払い済みにする"}</button>`;
+        element.querySelector('[data-day-field="paidDate"]').addEventListener("change", changeEvent => {
+          event.item.paidDate = normalizeDateValue(changeEvent.currentTarget.value);
+          if (event.item.paidDate) event.item.paid = true;
+          persist();
+          render();
+          renderDayDetails(date);
+        });
+        element.querySelector('[data-day-action="paid"]').addEventListener("click", () => {
+          event.item.paid = !event.item.paid;
+          if (!event.item.paid) event.item.paidDate = "";
+          persist();
+          render();
+          renderDayDetails(date);
+        });
+        dayDetailList.appendChild(element);
+      });
     }
 
     function toggleReorderMode() {
@@ -2059,10 +2423,11 @@
       const activeIndex = sortedMonths.findIndex(month => month.id === state.activeMonth);
       const previousButton = document.createElement("button");
       previousButton.type = "button";
-      previousButton.textContent = "‹";
-      previousButton.title = "前の月";
-      previousButton.setAttribute("aria-label", "前の月");
-      previousButton.disabled = activeIndex <= 0;
+      const isOldestMonth = activeIndex === 0;
+      previousButton.textContent = isOldestMonth ? "前月を追加" : "‹";
+      previousButton.title = isOldestMonth ? "前月を追加" : "前の月";
+      previousButton.setAttribute("aria-label", isOldestMonth ? "前月を追加" : "前の月");
+      previousButton.disabled = activeIndex < 0;
 
       const monthSelect = document.createElement("select");
       monthSelect.setAttribute("aria-label", "表示する年月");
@@ -2084,7 +2449,13 @@
         persist();
         render();
       };
-      previousButton.addEventListener("click", () => selectMonth(sortedMonths[activeIndex - 1]?.id));
+      previousButton.addEventListener("click", () => {
+        if (isOldestMonth) {
+          addPreviousMonth();
+          return;
+        }
+        selectMonth(sortedMonths[activeIndex - 1]?.id);
+      });
       nextButton.addEventListener("click", () => {
         if (isLatestMonth) {
           addNextMonth();
@@ -2169,6 +2540,7 @@
       const usagePeriodStartLabel = formatMonthDayLabel(item.usagePeriodStart);
       const usagePeriodEndLabel = formatMonthDayLabel(item.usagePeriodEnd);
       const previousPeriodRange = previousUsagePeriodRange(item, monthId);
+      const inheritedDebitDate = previousDebitDate(item, monthId);
       article.className = `entry${item.paid ? " done" : ""}`;
       article.dataset.seriesId = item.seriesId || item.id;
       article.dataset.account = item.debitAccount || unassignedAccount;
@@ -2181,10 +2553,12 @@
               <div class="entry-meta">
                 <span class="payment-source ${paymentType === "card" ? "card" : "direct"}">${escapeHtml(paymentSourceLabel)}</span>
                 ${billingCycleMonths > 1 ? `<span class="billing-cycle">${billingCycleLabel(billingCycleMonths)}</span>` : ""}
-                <button class="entry-edit" type="button">編集</button>
               </div>
             </div>
-            <input class="amount-input" inputmode="numeric" value="${escapeAttr(formatAmountInput(item.amount))}" data-field="amount" aria-label="${escapeAttr(item.content || "明細")}の金額">
+            <div class="entry-actions">
+              <button class="entry-edit" type="button">編集</button>
+              <input class="amount-input" inputmode="numeric" value="${escapeAttr(formatAmountInput(item.amount))}" data-field="amount" aria-label="${escapeAttr(item.content || "明細")}の金額">
+            </div>
           </div>
           <div class="entry-fields">
             <div class="field entry-field-period">
@@ -2204,8 +2578,15 @@
               </div>
             </div>
             <div class="field entry-field-debit">
-              <label>引落とし日</label>
+              <div class="entry-field-label-row">
+                <label>引落とし日</label>
+                <button class="inline-action" type="button" data-action="previous-debit-date" ${inheritedDebitDate ? "" : "disabled"}>前回の引落日</button>
+              </div>
               <input inputmode="numeric" maxlength="2" pattern="[0-9]*" value="${escapeAttr(debitDayLabel)}" data-field="debitDate">
+            </div>
+            <div class="field entry-field-paid">
+              <label>支払実績日</label>
+              <input type="date" value="${escapeAttr(item.paidDate || "")}" data-field="paidDate">
             </div>
             <div class="field entry-field-note">
               <label>備考</label>
@@ -2216,6 +2597,7 @@
 
       article.querySelector(".check").addEventListener("click", () => {
         item.paid = !item.paid;
+        if (!item.paid) item.paidDate = "";
         persist();
         render();
       });
@@ -2232,6 +2614,14 @@
         if (!range) return;
         item.usagePeriodStart = range.start;
         item.usagePeriodEnd = range.end;
+        persist();
+        render();
+      });
+      article.querySelector("[data-action='previous-debit-date']").addEventListener("click", () => {
+        const date = previousDebitDate(item, monthId);
+        if (!date) return;
+        item.debitDate = date;
+        item.debitDay = dayFromDate(date);
         persist();
         render();
       });
@@ -2296,6 +2686,11 @@
         item.debitDate = debitDay ? dateFromMonthAndDay(monthId, debitDay) : "";
         return;
       }
+      if (field === "paidDate") {
+        item.paidDate = normalizeDateValue(text);
+        if (item.paidDate) item.paid = true;
+        return;
+      }
       if (field === "amount") {
         item.amount = normalizeAmountValue(text);
         return;
@@ -2318,6 +2713,7 @@
         formatDateLabel(item.usedDate),
         item.usagePeriodStart,
         item.usagePeriodEnd,
+        item.paidDate,
         usagePeriod,
         normalizeBillingCycleMonths(item.billingCycleMonths) > 1 ? billingCycleLabel(item.billingCycleMonths) : "",
         item.content,
@@ -2358,8 +2754,7 @@
       return index < 0 ? Number.MAX_SAFE_INTEGER : index;
     }
 
-    function renderAccountSuggestions() {
-      accountSuggestions.innerHTML = "";
+    function accountValues() {
       const accounts = new Set();
       state.months.forEach(month => {
         month.items.forEach(item => {
@@ -2369,9 +2764,35 @@
           }
         });
       });
-      Array.from(accounts).sort((a, b) => a.localeCompare(b, "ja")).forEach(account => {
-        accountSuggestions.appendChild(new Option(account));
+      return Array.from(accounts).sort((a, b) =>
+        orderRank(state.sortOrder.accounts, a) - orderRank(state.sortOrder.accounts, b) || a.localeCompare(b, "ja")
+      );
+    }
+
+    function renderAccountSuggestions() {
+      return accountValues();
+    }
+
+    function renderAccountOptions(selectedAccount = "") {
+      debitAccountInput.innerHTML = "";
+      debitAccountInput.add(new Option("既存の口座から選択", ""));
+      accountValues().forEach(account => {
+        debitAccountInput.add(new Option(account, account, false, account === selectedAccount));
       });
+      debitAccountInput.add(new Option("新しい口座を入力", "__custom__"));
+      if (selectedAccount && !accountValues().includes(selectedAccount)) {
+        debitAccountInput.add(new Option(selectedAccount, selectedAccount, true, true), 1);
+      }
+      debitAccountInput.value = selectedAccount || "";
+      syncDebitAccountField();
+    }
+
+    function syncDebitAccountField() {
+      const isCustom = debitAccountInput.value === "__custom__";
+      customDebitAccountField.hidden = !isCustom;
+      customDebitAccountInput.disabled = !isCustom;
+      customDebitAccountInput.required = isCustom;
+      if (!isCustom) customDebitAccountInput.value = "";
     }
 
     function renderSummary() {
@@ -2411,6 +2832,14 @@
     }
 
     function closeOpenSheet() {
+      if (daySheet.classList.contains("open")) {
+        closeDaySheet();
+        return;
+      }
+      if (trashSheet.classList.contains("open")) {
+        closeTrashSheet();
+        return;
+      }
       if (monthSheet.classList.contains("open")) {
         closeMonthSheet();
         return;
@@ -2420,6 +2849,69 @@
         return;
       }
       closeSheet();
+    }
+
+    function openTrashSheet() {
+      trashError.textContent = "";
+      trashError.classList.remove("show");
+      renderTrash();
+      trashSheet.classList.add("open");
+      scrim.classList.add("open");
+      trashSheet.setAttribute("aria-hidden", "false");
+      trashSheet.scrollTop = 0;
+    }
+
+    function closeTrashSheet() {
+      trashSheet.classList.remove("open");
+      scrim.classList.remove("open");
+      trashSheet.setAttribute("aria-hidden", "true");
+    }
+
+    function renderTrash() {
+      state.trash = normalizeTrash(state.trash);
+      trashList.innerHTML = "";
+      if (!state.trash.length) {
+        trashList.innerHTML = '<div class="empty">最近削除した項目はありません</div>';
+        return;
+      }
+      state.trash.slice().sort((a, b) => b.deletedAt.localeCompare(a.deletedAt)).forEach(entry => {
+        const element = document.createElement("div");
+        element.className = "trash-item";
+        element.innerHTML = `
+          <strong>${escapeHtml(entry.item.content || "内容未設定")}</strong>
+          <span>${escapeHtml(entry.monthLabel)}・${escapeHtml(entry.item.debitAccount || unassignedAccount)}</span>
+          <span>削除: ${escapeHtml(formatDateTime(entry.deletedAt))}</span>
+          <div class="trash-item-actions">
+            <button class="secondary" type="button" data-trash-action="restore">復元</button>
+            <button class="danger" type="button" data-trash-action="delete">完全削除</button>
+          </div>`;
+        element.querySelector('[data-trash-action="restore"]').addEventListener("click", () => restoreTrashItem(entry.id));
+        element.querySelector('[data-trash-action="delete"]').addEventListener("click", () => permanentlyDeleteTrashItem(entry.id));
+        trashList.appendChild(element);
+      });
+    }
+
+    function restoreTrashItem(id) {
+      const entry = state.trash.find(item => item.id === id);
+      const month = state.months.find(item => item.id === entry?.monthId);
+      if (!entry || !month) return;
+      if (month.items.some(item => String(item.seriesId) === String(entry.item.seriesId))) {
+        trashError.textContent = "同じ支払い方法が既に存在するため復元できません。";
+        trashError.classList.add("show");
+        return;
+      }
+      month.items.push(normalizeItem(entry.item, month.id));
+      state.trash = state.trash.filter(item => item.id !== id);
+      persist();
+      renderTrash();
+      render();
+    }
+
+    function permanentlyDeleteTrashItem(id) {
+      state.trash = state.trash.filter(item => item.id !== id);
+      persist();
+      renderTrash();
+      render();
     }
 
     function addSelectedMonth(event) {
@@ -2444,6 +2936,22 @@
       addMonth(id, formatMonthLabel(id));
     }
 
+    function addPreviousMonth() {
+      const oldestMonth = state.months.slice().sort((a, b) => a.id.localeCompare(b.id))[0];
+      if (!oldestMonth) return;
+      const id = offsetMonthId(oldestMonth.id, -1);
+      if (state.months.some(existing => existing.id === id)) return;
+      state.months.push({
+        id,
+        label: formatMonthLabel(id),
+        items: itemsForPreviousMonth(id, oldestMonth)
+      });
+      state.months.sort((a, b) => a.id.localeCompare(b.id));
+      state.activeMonth = id;
+      persist();
+      render();
+    }
+
     function addMonth(id, label = formatMonthLabel(id)) {
       if (state.months.some(existing => existing.id === id)) return false;
       state.months.push({
@@ -2465,13 +2973,11 @@
       sheetTitle.textContent = item ? "明細の詳細" : "明細を追加";
       deleteButton.style.display = item ? "block" : "none";
       clearEntryError();
-      renderAccountSuggestions();
-      debitAccountInput.value = item?.debitAccount || "";
+      renderAccountOptions(item?.debitAccount || "");
+      customDebitAccountInput.value = "";
       paymentTypeInput.value = normalizePaymentType(item?.paymentType);
       paymentMethodInput.value = item?.paymentMethod || "";
       contentInput.value = item?.content || "";
-      amountInput.value = formatAmountInput(item?.amount);
-      debitDateInput.value = item?.debitDate || "";
       if ([1, 2, 3, 6, 12].includes(itemBillingCycle)) {
         billingCycleInput.value = String(itemBillingCycle);
         customBillingCycleInput.value = "";
@@ -2479,10 +2985,7 @@
         billingCycleInput.value = "custom";
         customBillingCycleInput.value = String(itemBillingCycle);
       }
-      usagePeriodStartInput.value = item?.usagePeriodStart || "";
-      usagePeriodEndInput.value = item?.usagePeriodEnd || "";
       noteInput.value = item?.note || "";
-      syncPreviousPeriodButton(item);
       syncPaymentMethodField();
       syncBillingCycleField();
       sheet.classList.add("open");
@@ -2518,16 +3021,14 @@
       event.preventDefault();
       const month = currentMonth();
       const paymentType = normalizePaymentType(paymentTypeInput.value);
-      const debitAccount = debitAccountInput.value.trim();
+      const debitAccount = debitAccountInput.value === "__custom__"
+        ? customDebitAccountInput.value.trim()
+        : debitAccountInput.value.trim();
       const paymentMethod = paymentType === "card" ? paymentMethodInput.value.trim() : "";
       const content = contentInput.value.trim();
-      const debitDate = normalizeDateValue(debitDateInput.value);
-      const debitDay = dayFromDate(debitDate);
       const selectedCycleValue = billingCycleInput.value === "custom"
         ? customBillingCycleInput.value
         : billingCycleInput.value;
-      const usagePeriodStart = normalizeDateValue(usagePeriodStartInput.value);
-      const usagePeriodEnd = normalizeDateValue(usagePeriodEndInput.value);
       const existingItem = editingId ? month.items.find(entry => entry.id === editingId) : null;
 
       if (!debitAccount) {
@@ -2556,30 +3057,20 @@
         ? normalizeBillingStartMonth(existingItem.billingStartMonth, month.id)
         : month.id;
 
-      const invalidDateField = [
-        [debitDateInput, "引落とし日"],
-        [usagePeriodStartInput, "利用期間 開始"],
-        [usagePeriodEndInput, "利用期間 終了"]
-      ].find(([input]) => input.value.trim() && !normalizeDateValue(input.value));
-
-      if (invalidDateField) {
-        showEntryError(`${invalidDateField[1]}はYYYY-MM-DD形式で入力してください。`);
-        return;
-      }
-
       const payload = {
         debitAccount,
         paymentType,
         paymentMethod,
         content,
-        amount: normalizeAmountValue(amountInput.value),
+        amount: existingItem?.amount || "",
         usedDate: existingItem?.usedDate || "",
-        debitDate,
-        debitDay,
+        debitDate: existingItem?.debitDate || "",
+        debitDay: existingItem?.debitDay || null,
         billingCycleMonths,
         billingStartMonth,
-        usagePeriodStart,
-        usagePeriodEnd,
+        usagePeriodStart: existingItem?.usagePeriodStart || "",
+        usagePeriodEnd: existingItem?.usagePeriodEnd || "",
+        paidDate: existingItem?.paidDate || "",
         note: noteInput.value.trim()
       };
 
@@ -2606,26 +3097,12 @@
       }
     }
 
-    function selectedSheetBillingCycle() {
-      const value = billingCycleInput.value === "custom"
-        ? customBillingCycleInput.value
-        : billingCycleInput.value;
-      return isValidBillingCycleMonths(value) ? Number(value) : 1;
-    }
-
     function syncBillingCycleField() {
       const isCustom = billingCycleInput.value === "custom";
       customBillingCycleField.hidden = !isCustom;
       customBillingCycleInput.disabled = !isCustom;
       customBillingCycleInput.required = isCustom;
-      syncSheetPeriodButtonLabel();
-    }
-
-    function syncSheetPeriodButtonLabel() {
-      const cycle = selectedSheetBillingCycle();
-      sheetFullMonthButton.textContent = `直前${cycle}ヶ月まるごと`;
-      sheetFullMonthButton.title = `引落月直前の${cycle}ヶ月を月初から月末まで入力`;
-      sheetFullMonthButton.setAttribute("aria-label", `直前${cycle}ヶ月まるごと入力`);
+      clearEntryError();
     }
 
     function showEntryError(message) {
@@ -2638,35 +3115,19 @@
       entryError.classList.remove("show");
     }
 
-    function syncPreviousPeriodButton(item) {
-      const range = item ? previousUsagePeriodRange(item, currentMonth().id) : null;
-      sheetPreviousPeriodButton.disabled = !range;
-      sheetPreviousPeriodButton.dataset.start = range?.start || "";
-      sheetPreviousPeriodButton.dataset.end = range?.end || "";
-      sheetPreviousPeriodButton.title = "前回終了日の翌日から翌月同日までを入力";
-      sheetPreviousPeriodButton.setAttribute("aria-label", "続きの1ヶ月を入力");
-    }
-
-    function applyPreviousPeriodRangeToSheet() {
-      const item = editingId ? currentMonth().items.find(entry => entry.id === editingId) : null;
-      const range = previousUsagePeriodRange(item, currentMonth().id);
-      if (!range) return;
-      usagePeriodStartInput.value = range.start;
-      usagePeriodEndInput.value = range.end;
-      sheetPreviousPeriodButton.dataset.start = range.start;
-      sheetPreviousPeriodButton.dataset.end = range.end;
-    }
-
-    function applyFullMonthToSheet() {
-      const range = fullCycleRange(currentMonth().id, selectedSheetBillingCycle());
-      if (!range) return;
-      usagePeriodStartInput.value = range.start;
-      usagePeriodEndInput.value = range.end;
-    }
-
     function deleteEntry() {
       if (!editingId) return;
       const month = currentMonth();
+      const item = month.items.find(entry => entry.id === editingId);
+      if (item) {
+        state.trash.push({
+          id: crypto.randomUUID(),
+          deletedAt: new Date().toISOString(),
+          monthId: month.id,
+          monthLabel: month.label,
+          item: structuredClone(item)
+        });
+      }
       month.items = month.items.filter(item => item.id !== editingId);
       persist();
       closeSheet();
