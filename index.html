@@ -168,7 +168,7 @@
 
     .month-navigation {
       display: grid;
-      grid-template-columns: 72px minmax(0, 1fr) 72px;
+      grid-template-columns: 92px minmax(0, 1fr) 92px;
       gap: 8px;
       padding: 10px 0 0;
     }
@@ -298,6 +298,17 @@
       font-weight: 800;
     }
 
+    .soft-button.active {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: white;
+    }
+
+    .soft-button:disabled {
+      cursor: not-allowed;
+      opacity: .45;
+    }
+
     .list {
       display: grid;
       gap: 10px;
@@ -319,6 +330,48 @@
       gap: 10px;
       padding: 7px 2px 5px;
       border-bottom: 1px solid rgba(173, 159, 136, .38);
+    }
+
+    .drag-handle {
+      display: none;
+      flex: 0 0 auto;
+      width: 28px;
+      height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      cursor: grab;
+      font-size: 18px;
+      line-height: 1;
+      touch-action: none;
+      user-select: none;
+    }
+
+    .list.reordering .drag-handle {
+      display: grid;
+      place-items: center;
+    }
+
+    .list.reordering .account-head {
+      justify-content: flex-start;
+    }
+
+    .list.reordering .account-toggle {
+      flex: 1 1 auto;
+    }
+
+    .list.reordering .entry-main {
+      grid-template-columns: 28px 34px minmax(0, 1fr) auto;
+    }
+
+    .dragging {
+      opacity: .55;
+    }
+
+    .drop-target {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
 
     .account-title {
@@ -1056,6 +1109,7 @@
     <section class="month-head">
       <h2 id="monthTitle"></h2>
       <div class="compact-actions">
+        <button class="soft-button" id="reorderButton" type="button" aria-pressed="false">並び替え</button>
         <button class="soft-button" id="addMonthButton" type="button">月を追加</button>
         <button class="soft-button" id="addEntryButton" type="button">支払い方法を追加</button>
       </div>
@@ -1206,6 +1260,7 @@
 
     const seed = {
       activeMonth: "2026-05",
+      sortOrder: { accounts: [], series: [] },
       months: [
         {
           id: "2026-05",
@@ -1231,6 +1286,8 @@
     let activeStateSource = "anonymous";
     const state = loadState(activeStorageKey);
     let editingId = null;
+    let reorderMode = false;
+    let dragState = null;
     const collapsedAccountGroups = new Set();
     const expandedMonthlyTables = new Set();
     let supabaseClient = null;
@@ -1245,6 +1302,7 @@
     const totalAmount = document.getElementById("totalAmount");
     const paidCount = document.getElementById("paidCount");
     const searchInput = document.getElementById("searchInput");
+    const reorderButton = document.getElementById("reorderButton");
     const sheet = document.getElementById("entrySheet");
     const monthSheet = document.getElementById("monthSheet");
     const settingsSheet = document.getElementById("settingsSheet");
@@ -1282,6 +1340,7 @@
 
     document.getElementById("addEntryButton").addEventListener("click", () => openSheet());
     document.getElementById("addMonthButton").addEventListener("click", openMonthSheet);
+    reorderButton.addEventListener("click", toggleReorderMode);
     document.getElementById("settingsButton").addEventListener("click", openSettingsSheet);
     document.getElementById("closeSheetButton").addEventListener("click", closeSheet);
     document.getElementById("closeMonthSheetButton").addEventListener("click", closeMonthSheet);
@@ -1290,7 +1349,10 @@
     document.getElementById("importButton").addEventListener("click", () => importInput.click());
     importInput.addEventListener("change", importJson);
     scrim.addEventListener("click", closeOpenSheet);
-    searchInput.addEventListener("input", render);
+    searchInput.addEventListener("input", () => {
+      if (searchInput.value.trim()) reorderMode = false;
+      render();
+    });
     form.addEventListener("submit", saveEntry);
     monthForm.addEventListener("submit", addSelectedMonth);
     deleteButton.addEventListener("click", deleteEntry);
@@ -1331,6 +1393,7 @@
     }
 
     function persist(options = {}) {
+      state.sortOrder = normalizeSortOrder(state.sortOrder, state.months);
       if (!options.keepUpdatedAt) {
         state.updatedAt = new Date().toISOString();
       }
@@ -1346,21 +1409,78 @@
       normalized.months = Array.isArray(normalized.months) && normalized.months.length
         ? normalized.months.map(normalizeMonth)
         : structuredClone(seed.months).map(normalizeMonth);
+      normalized.sortOrder = normalizeSortOrder(normalized.sortOrder, normalized.months);
       normalized.activeMonth = normalized.months.some(month => month.id === normalized.activeMonth)
         ? normalized.activeMonth
         : normalized.months[0]?.id || seed.activeMonth;
       normalized.updatedAt = normalized.updatedAt || new Date().toISOString();
-      normalized.schemaVersion = 7;
+      normalized.schemaVersion = 8;
       return normalized;
     }
 
     function normalizeMonth(month) {
       const id = month?.id || seed.activeMonth;
+      const items = Array.isArray(month?.items) ? month.items.map(item => normalizeItem(item, id)) : [];
       return {
         id,
         label: month?.label || formatMonthLabel(id),
-        items: Array.isArray(month?.items) ? month.items.map(item => normalizeItem(item, id)) : []
+        items: dedupeMonthItems(items)
       };
+    }
+
+    function dedupeMonthItems(items) {
+      const bySeries = new Map();
+      items.forEach(item => {
+        const seriesId = String(item.seriesId || item.id);
+        if (!bySeries.has(seriesId)) {
+          bySeries.set(seriesId, item);
+          return;
+        }
+        mergeDuplicateItem(bySeries.get(seriesId), item);
+      });
+      return Array.from(bySeries.values());
+    }
+
+    function mergeDuplicateItem(target, duplicate) {
+      [
+        "debitAccount", "paymentMethod", "content", "amount", "usedDate", "debitDate",
+        "debitDay", "billingStartMonth", "usagePeriodStart", "usagePeriodEnd", "note"
+      ].forEach(field => {
+        if ((target[field] === "" || target[field] === null || target[field] === undefined) &&
+            duplicate[field] !== "" && duplicate[field] !== null && duplicate[field] !== undefined) {
+          target[field] = duplicate[field];
+        }
+      });
+      target.paid = Boolean(target.paid || duplicate.paid);
+      return target;
+    }
+
+    function normalizeSortOrder(value, months) {
+      const knownAccounts = [];
+      const knownSeries = [];
+      months.forEach(month => month.items.forEach(item => {
+        pushUnique(knownAccounts, item.debitAccount || unassignedAccount);
+        pushUnique(knownSeries, item.seriesId || item.id);
+      }));
+      return {
+        accounts: normalizeOrderList(value?.accounts, knownAccounts),
+        series: normalizeOrderList(value?.series, knownSeries)
+      };
+    }
+
+    function normalizeOrderList(value, knownValues) {
+      const known = new Set(knownValues.map(String));
+      const result = [];
+      (Array.isArray(value) ? value : []).forEach(entry => {
+        const key = String(entry);
+        if (known.has(key)) pushUnique(result, key);
+      });
+      knownValues.forEach(entry => pushUnique(result, String(entry)));
+      return result;
+    }
+
+    function pushUnique(values, entry) {
+      if (!values.includes(entry)) values.push(entry);
     }
 
     function normalizeItem(item, monthId = seed.activeMonth) {
@@ -1735,9 +1855,26 @@
           });
         });
 
+      const signatures = new Set();
       return Array.from(latestBySeries.values())
         .filter(item => isBillingDueInMonth(item, targetMonthId))
+        .filter(item => {
+          const signature = automaticCopySignature(item);
+          if (signatures.has(signature)) return false;
+          signatures.add(signature);
+          return true;
+        })
         .map(item => copyItemForMonth(item, targetMonthId));
+    }
+
+    function automaticCopySignature(item) {
+      return JSON.stringify([
+        String(item.debitAccount || unassignedAccount).trim(),
+        normalizePaymentType(item.paymentType),
+        String(item.paymentMethod || "").trim(),
+        String(item.content || "").trim(),
+        normalizeBillingCycleMonths(item.billingCycleMonths)
+      ]);
     }
 
     function replaceState(nextState, updatedAt) {
@@ -1779,11 +1916,102 @@
     }
 
     function render() {
+      state.sortOrder = normalizeSortOrder(state.sortOrder, state.months);
       renderTabs();
       renderAccountSuggestions();
       renderMonthlyTable();
       renderEntries();
       renderSummary();
+    }
+
+    function toggleReorderMode() {
+      if (searchInput.value.trim()) return;
+      reorderMode = !reorderMode;
+      renderEntries();
+    }
+
+    function bindDragHandle(handle, kind, key, account, container) {
+      handle.title = "ドラッグして並び替え（キーボードは上下矢印）";
+      handle.addEventListener("pointerdown", event => {
+        if (!reorderMode || event.button !== 0) return;
+        event.preventDefault();
+        dragState = { kind, key: String(key), account, container, target: null };
+        container.classList.add("dragging");
+        handle.setPointerCapture(event.pointerId);
+      });
+      handle.addEventListener("pointermove", event => {
+        if (!dragState || dragState.container !== container) return;
+        event.preventDefault();
+        updateDragTarget(event.clientX, event.clientY);
+      });
+      handle.addEventListener("pointerup", event => finishDrag(event.clientY));
+      handle.addEventListener("pointercancel", cancelDrag);
+      handle.addEventListener("keydown", event => {
+        if (!reorderMode || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+        event.preventDefault();
+        const candidates = kind === "account"
+          ? Array.from(list.querySelectorAll(".account-group"))
+          : Array.from(container.closest(".account-group").querySelectorAll(".entry"));
+        const currentIndex = candidates.indexOf(container);
+        const direction = event.key === "ArrowUp" ? -1 : 1;
+        const target = candidates[currentIndex + direction];
+        if (!target) return;
+        const targetKey = kind === "account" ? target.dataset.account : target.dataset.seriesId;
+        const order = kind === "account" ? state.sortOrder.accounts : state.sortOrder.series;
+        moveOrderValue(order, String(key), targetKey, direction > 0);
+        persist();
+        render();
+      });
+    }
+
+    function updateDragTarget(clientX, clientY) {
+      if (!dragState) return;
+      const selector = dragState.kind === "account" ? ".account-group" : ".entry";
+      const candidate = document.elementFromPoint(clientX, clientY)?.closest(selector);
+      const validCandidate = candidate && candidate !== dragState.container &&
+        (dragState.kind === "account" || candidate.dataset.account === dragState.account)
+        ? candidate
+        : null;
+      if (dragState.target === validCandidate) return;
+      dragState.target?.classList.remove("drop-target");
+      dragState.target = validCandidate;
+      dragState.target?.classList.add("drop-target");
+    }
+
+    function finishDrag(clientY) {
+      if (!dragState) return;
+      const { kind, key, target, container } = dragState;
+      if (target) {
+        const targetKey = kind === "account" ? target.dataset.account : target.dataset.seriesId;
+        const after = clientY > target.getBoundingClientRect().top + target.getBoundingClientRect().height / 2;
+        const order = kind === "account" ? state.sortOrder.accounts : state.sortOrder.series;
+        moveOrderValue(order, key, targetKey, after);
+        persist();
+      }
+      target?.classList.remove("drop-target");
+      container.classList.remove("dragging");
+      dragState = null;
+      render();
+    }
+
+    function cancelDrag() {
+      if (!dragState) return;
+      dragState.target?.classList.remove("drop-target");
+      dragState.container.classList.remove("dragging");
+      dragState = null;
+    }
+
+    function moveOrderValue(order, source, target, after) {
+      if (source === target) return;
+      const sourceIndex = order.indexOf(source);
+      if (sourceIndex < 0) return;
+      order.splice(sourceIndex, 1);
+      const targetIndex = order.indexOf(target);
+      if (targetIndex < 0) {
+        order.push(source);
+        return;
+      }
+      order.splice(targetIndex + (after ? 1 : 0), 0, source);
     }
 
     function toggleMonthlyTable() {
@@ -1807,8 +2035,9 @@
       }
 
       const total = month.items.reduce((sum, item) => sum + toNumber(item.amount), 0);
-      const rows = month.items.length
-        ? month.items.map(item => `
+      const sortedItems = orderedItems(month.items);
+      const rows = sortedItems.length
+        ? sortedItems.map(item => `
             <tr>
               <td>${escapeHtml(item.content || "内容未設定")}</td>
               <td>${formatAmount(item.amount)}</td>
@@ -1844,9 +2073,9 @@
       const nextButton = document.createElement("button");
       nextButton.type = "button";
       const isLatestMonth = activeIndex === sortedMonths.length - 1;
-      nextButton.textContent = isLatestMonth ? "月を追加" : "›";
-      nextButton.title = isLatestMonth ? "月を追加" : "次の月";
-      nextButton.setAttribute("aria-label", isLatestMonth ? "月を追加" : "次の月");
+      nextButton.textContent = isLatestMonth ? "翌月を追加" : "›";
+      nextButton.title = isLatestMonth ? "翌月を追加" : "次の月";
+      nextButton.setAttribute("aria-label", isLatestMonth ? "翌月を追加" : "次の月");
       nextButton.disabled = activeIndex < 0;
 
       const selectMonth = id => {
@@ -1858,7 +2087,7 @@
       previousButton.addEventListener("click", () => selectMonth(sortedMonths[activeIndex - 1]?.id));
       nextButton.addEventListener("click", () => {
         if (isLatestMonth) {
-          openMonthSheet();
+          addNextMonth();
           return;
         }
         selectMonth(sortedMonths[activeIndex + 1]?.id);
@@ -1870,11 +2099,16 @@
     function renderEntries() {
       const month = currentMonth();
       const query = searchInput.value.trim().toLowerCase();
-      const items = month.items.filter(item => matchesQuery(item, query, month.id));
+      const items = orderedItems(month.items).filter(item => matchesQuery(item, query, month.id));
       const accountGroups = groupItemsByDebitAccount(items);
 
       monthTitle.textContent = month.label;
       list.innerHTML = "";
+      list.classList.toggle("reordering", reorderMode);
+      reorderButton.classList.toggle("active", reorderMode);
+      reorderButton.setAttribute("aria-pressed", String(reorderMode));
+      reorderButton.disabled = Boolean(query);
+      reorderButton.title = query ? "検索を解除すると並び替えできます" : "銀行と支払い方法を並び替え";
 
       if (!accountGroups.length) {
         const empty = document.createElement("div");
@@ -1887,12 +2121,14 @@
       accountGroups.forEach(group => {
         const section = document.createElement("section");
         section.className = "account-group";
+        section.dataset.account = group.account;
         const groupKey = `${month.id}\u0000${group.account}`;
         const isCollapsed = collapsedAccountGroups.has(groupKey);
         const groupSum = group.items.reduce((acc, item) => acc + toNumber(item.amount), 0);
         const groupPaid = group.items.filter(item => item.paid).length;
         section.innerHTML = `
           <div class="account-head">
+            <button class="drag-handle account-drag-handle" type="button" aria-label="${escapeAttr(group.account)}を並び替え">≡</button>
             <button class="account-toggle" type="button" aria-expanded="${String(!isCollapsed)}">
               <span class="account-chevron" aria-hidden="true">⌄</span>
               <span class="account-title">
@@ -1907,6 +2143,7 @@
 
         const accountItems = section.querySelector(".account-items");
         group.items.forEach(item => accountItems.appendChild(renderEntryCard(item, month.id)));
+        bindDragHandle(section.querySelector(".account-drag-handle"), "account", group.account, group.account, section);
         section.querySelector(".account-toggle").addEventListener("click", event => {
           const collapsed = !accountItems.hidden;
           accountItems.hidden = collapsed;
@@ -1933,8 +2170,11 @@
       const usagePeriodEndLabel = formatMonthDayLabel(item.usagePeriodEnd);
       const previousPeriodRange = previousUsagePeriodRange(item, monthId);
       article.className = `entry${item.paid ? " done" : ""}`;
+      article.dataset.seriesId = item.seriesId || item.id;
+      article.dataset.account = item.debitAccount || unassignedAccount;
       article.innerHTML = `
           <div class="entry-main">
+            <button class="drag-handle entry-drag-handle" type="button" aria-label="${escapeAttr(item.content || "明細")}を並び替え">≡</button>
             <button class="check" type="button" title="支払い済み" aria-label="支払い済み">${item.paid ? "✓" : ""}</button>
             <div class="entry-title">
               <strong>${escapeHtml(item.content || "内容未設定")}</strong>
@@ -1979,6 +2219,13 @@
         persist();
         render();
       });
+      bindDragHandle(
+        article.querySelector(".entry-drag-handle"),
+        "series",
+        item.seriesId || item.id,
+        item.debitAccount || unassignedAccount,
+        article
+      );
       article.querySelector(".entry-edit").addEventListener("click", () => openSheet(item.id));
       article.querySelector("[data-action='previous-period-start']").addEventListener("click", () => {
         const range = previousUsagePeriodRange(item, monthId);
@@ -2090,7 +2337,25 @@
         }
         groups.get(account).items.push(item);
       });
-      return Array.from(groups.values());
+      return Array.from(groups.values()).sort((a, b) =>
+        orderRank(state.sortOrder.accounts, a.account) - orderRank(state.sortOrder.accounts, b.account)
+      );
+    }
+
+    function orderedItems(items) {
+      return items
+        .map((item, index) => ({ item, index }))
+        .sort((a, b) => {
+          const rankDifference = orderRank(state.sortOrder.series, a.item.seriesId || a.item.id) -
+            orderRank(state.sortOrder.series, b.item.seriesId || b.item.id);
+          return rankDifference || a.index - b.index;
+        })
+        .map(entry => entry.item);
+    }
+
+    function orderRank(order, value) {
+      const index = order.indexOf(String(value));
+      return index < 0 ? Number.MAX_SAFE_INTEGER : index;
     }
 
     function renderAccountSuggestions() {
@@ -2168,6 +2433,19 @@
         monthError.classList.add("show");
         return;
       }
+      addMonth(id, label);
+      closeMonthSheet();
+    }
+
+    function addNextMonth() {
+      const latestMonth = state.months.slice().sort((a, b) => a.id.localeCompare(b.id)).at(-1);
+      if (!latestMonth) return;
+      const id = offsetMonthId(latestMonth.id, 1);
+      addMonth(id, formatMonthLabel(id));
+    }
+
+    function addMonth(id, label = formatMonthLabel(id)) {
+      if (state.months.some(existing => existing.id === id)) return false;
       state.months.push({
         id,
         label,
@@ -2176,8 +2454,8 @@
       state.months.sort((a, b) => a.id.localeCompare(b.id));
       state.activeMonth = id;
       persist();
-      closeMonthSheet();
       render();
+      return true;
     }
 
     function openSheet(id) {
