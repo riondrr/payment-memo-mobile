@@ -145,6 +145,23 @@
       border-bottom: 1px solid rgba(173, 159, 136, .28);
     }
 
+    .search-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: stretch;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .search-actions .search {
+      min-width: 0;
+    }
+
+    .search-actions .soft-button {
+      min-height: 44px;
+      white-space: nowrap;
+    }
+
     .search {
       display: grid;
       grid-template-columns: 28px 1fr;
@@ -170,7 +187,6 @@
       display: grid;
       grid-template-columns: 92px minmax(0, 1fr) 92px;
       gap: 8px;
-      padding: 10px 0 0;
     }
 
     .month-navigation button,
@@ -196,18 +212,11 @@
       opacity: .4;
     }
 
-    .month-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 6px 2px 12px;
-    }
-
-    .month-head h2 {
-      margin: 0;
-      font-size: 19px;
-      letter-spacing: 0;
+    .primary-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
     }
 
     .monthly-table-panel {
@@ -1000,6 +1009,10 @@
       text-decoration: none;
     }
 
+    .settings-trash-button {
+      width: 100%;
+    }
+
     .status {
       display: grid;
       gap: 5px;
@@ -1223,6 +1236,12 @@
         min-height: 70px;
         padding: 4px;
       }
+
+      .primary-actions .soft-button,
+      .search-actions .soft-button {
+        padding-inline: 8px;
+        font-size: 12px;
+      }
     }
   </style>
 </head>
@@ -1248,27 +1267,26 @@
     </section>
 
     <section class="toolbar">
-      <label class="search" for="searchInput">
-        <span>⌕</span>
-        <input id="searchInput" type="search" placeholder="検索">
-      </label>
       <nav class="month-navigation" id="monthTabs" aria-label="月"></nav>
-    </section>
-
-    <section class="month-head">
-      <h2 id="monthTitle"></h2>
-      <div class="compact-actions">
-        <button class="soft-button" id="reorderButton" type="button" aria-pressed="false">並び替え</button>
-        <button class="soft-button" id="trashButton" type="button">最近削除</button>
-        <button class="soft-button" id="addMonthButton" type="button">月を追加</button>
-        <button class="soft-button" id="addEntryButton" type="button">支払い方法を追加</button>
-      </div>
     </section>
 
     <div class="view-toggle" role="tablist" aria-label="表示切替">
       <button class="active" id="listViewButton" type="button" role="tab" aria-selected="true">一覧</button>
       <button id="calendarViewButton" type="button" role="tab" aria-selected="false">カレンダー</button>
     </div>
+
+    <section class="primary-actions" aria-label="追加操作">
+      <button class="soft-button" id="addMonthButton" type="button">月を追加</button>
+      <button class="soft-button" id="addEntryButton" type="button">支払い方法を追加</button>
+    </section>
+
+    <section class="search-actions" aria-label="検索と並べ替え">
+      <label class="search" for="searchInput">
+        <span>⌕</span>
+        <input id="searchInput" type="search" placeholder="検索">
+      </label>
+      <button class="soft-button" id="reorderButton" type="button" aria-pressed="false">並べ替え</button>
+    </section>
 
     <div id="listView">
       <section class="monthly-table-panel" aria-label="月の内容と金額">
@@ -1382,6 +1400,7 @@
       <h2>設定</h2>
       <button class="icon-button" id="closeSettingsSheetButton" type="button" title="閉じる" aria-label="設定を閉じる">×</button>
     </div>
+    <button class="secondary settings-trash-button" id="trashButton" type="button">最近削除</button>
     <div class="status">
       <strong>クラウド同期</strong>
       <span id="cloudSyncStatus">未接続</span>
@@ -1451,7 +1470,6 @@
 
     const tabs = document.getElementById("monthTabs");
     const list = document.getElementById("entryList");
-    const monthTitle = document.getElementById("monthTitle");
     const monthlyTableToggle = document.getElementById("monthlyTableToggle");
     const monthlyTableWrap = document.getElementById("monthlyTableWrap");
     const totalAmount = document.getElementById("totalAmount");
@@ -2473,7 +2491,6 @@
       const items = orderedItems(month.items).filter(item => matchesQuery(item, query, month.id));
       const accountGroups = groupItemsByDebitAccount(items);
 
-      monthTitle.textContent = month.label;
       list.innerHTML = "";
       list.classList.toggle("reordering", reorderMode);
       reorderButton.classList.toggle("active", reorderMode);
@@ -2852,6 +2869,7 @@
     }
 
     function openTrashSheet() {
+      if (settingsSheet.classList.contains("open")) closeSettingsSheet();
       trashError.textContent = "";
       trashError.classList.remove("show");
       renderTrash();
