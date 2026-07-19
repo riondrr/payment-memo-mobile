@@ -733,21 +733,34 @@
       min-height: var(--entry-control-height);
     }
 
-    .entry-field-debit input,
     .entry-field-period input {
       text-align: right;
     }
 
     .entry-field-debit {
-      grid-column: span 2;
+      grid-column: span 7;
     }
 
-    .entry-field-debit > label {
-      font-size: 11px;
+    .entry-field-debit .debit-date-control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .entry-fields .entry-field-debit .debit-date-control input {
+      flex: 0 0 52px;
+      width: 52px;
+      text-align: left;
+    }
+
+    .entry-field-debit .inline-action {
+      flex: 0 0 auto;
+      white-space: nowrap;
     }
 
     .entry-field-note {
-      grid-column: span 8;
+      grid-column: span 3;
     }
 
     .period-actions {
@@ -1207,15 +1220,17 @@
     }
 
     @media (max-width: 360px) {
-      .entry-fields,
       .summary {
         grid-template-columns: 1fr;
       }
 
-      .entry-field-period,
-      .entry-field-debit,
-      .entry-field-note {
+      .entry-field-period {
         grid-column: 1 / -1;
+      }
+
+      .entry-field-debit .inline-action {
+        padding-inline: 8px;
+        font-size: 11px;
       }
 
       .amount-input {
@@ -1270,12 +1285,12 @@
       <button class="soft-button" id="addEntryButton" type="button">支払い方法を追加</button>
     </section>
 
-    <section class="search-actions" aria-label="検索と並べ替え">
+    <section class="search-actions" aria-label="検索と並び替え">
       <label class="search" for="searchInput">
         <span>⌕</span>
         <input id="searchInput" type="search" placeholder="検索">
       </label>
-      <button class="soft-button" id="reorderButton" type="button" aria-pressed="false">並べ替え</button>
+      <button class="soft-button" id="reorderButton" type="button" aria-pressed="false">並び替え</button>
     </section>
 
     <div id="listView">
@@ -2570,9 +2585,11 @@
             <div class="field entry-field-debit">
               <div class="entry-field-label-row">
                 <label>引落とし日</label>
-                <button class="inline-action" type="button" data-action="previous-debit-date" ${inheritedDebitDate ? "" : "disabled"}>前回の引落日</button>
               </div>
-              <input inputmode="numeric" maxlength="2" pattern="[0-9]*" value="${escapeAttr(debitDayLabel)}" data-field="debitDate">
+              <div class="debit-date-control">
+                <input inputmode="numeric" maxlength="2" pattern="[0-9]*" value="${escapeAttr(debitDayLabel)}" data-field="debitDate">
+                <button class="inline-action" type="button" data-action="previous-debit-date" title="前回の引落日を反映" aria-label="前回の引落日を反映" ${inheritedDebitDate ? "" : "disabled"}>前回と同じ日</button>
+              </div>
             </div>
             <div class="field entry-field-note">
               <label>備考</label>
