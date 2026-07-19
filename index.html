@@ -746,12 +746,8 @@
       font-size: 11px;
     }
 
-    .entry-field-paid {
-      grid-column: span 3;
-    }
-
     .entry-field-note {
-      grid-column: span 5;
+      grid-column: span 8;
     }
 
     .period-actions {
@@ -917,11 +913,6 @@
     .calendar-event.paid {
       background: #e8f6ef;
       color: #27704d;
-    }
-
-    .calendar-event.both {
-      background: #e7f2ff;
-      color: #315e9c;
     }
 
     .trash-list,
@@ -1223,7 +1214,6 @@
 
       .entry-field-period,
       .entry-field-debit,
-      .entry-field-paid,
       .entry-field-note {
         grid-column: 1 / -1;
       }
@@ -2193,20 +2183,15 @@
 
     function calendarEvents(monthId) {
       const eventsByDate = new Map();
-      const addEvent = (date, sourceMonth, item, type) => {
+      const addEvent = (date, sourceMonth, item) => {
         if (!date || !date.startsWith(`${monthId}-`)) return;
-        if (!eventsByDate.has(date)) eventsByDate.set(date, new Map());
-        const key = `${sourceMonth.id}\u0000${item.id}`;
-        const events = eventsByDate.get(date);
-        const event = events.get(key) || { sourceMonth, item, planned: false, paid: false };
-        event[type] = true;
-        events.set(key, event);
+        if (!eventsByDate.has(date)) eventsByDate.set(date, []);
+        eventsByDate.get(date).push({ sourceMonth, item });
       };
       state.months.forEach(sourceMonth => sourceMonth.items.forEach(item => {
-        addEvent(normalizeDateValue(item.debitDate), sourceMonth, item, "planned");
-        addEvent(normalizeDateValue(item.paidDate), sourceMonth, item, "paid");
+        addEvent(normalizeDateValue(item.debitDate), sourceMonth, item);
       }));
-      return new Map(Array.from(eventsByDate, ([date, events]) => [date, Array.from(events.values())]));
+      return eventsByDate;
     }
 
     function renderCalendar() {
@@ -2235,8 +2220,8 @@
         button.className = `calendar-day${date === today ? " today" : ""}`;
         button.setAttribute("aria-label", `${formatDateLabel(date)} ${dayEvents.length}件`);
         const eventMarkup = dayEvents.slice(0, 3).map(event => {
-          const eventClass = event.planned && event.paid ? "both" : event.paid ? "paid" : "planned";
-          const suffix = event.planned && event.paid ? " 予定・支払済" : event.paid ? " 支払済" : " 予定";
+          const eventClass = event.item.paid ? "paid" : "planned";
+          const suffix = event.item.paid ? " 支払い済み" : " 予定";
           return `<span class="calendar-event ${eventClass}">${escapeHtml(event.item.content || "明細")}${suffix}</span>`;
         }).join("");
         button.innerHTML = `<span class="calendar-date-number">${day}</span>${eventMarkup}${dayEvents.length > 3 ? `<span class="calendar-event">ほか${dayEvents.length - 3}件</span>` : ""}`;
@@ -2273,7 +2258,7 @@
       const events = calendarEvents(date.slice(0, 7)).get(date) || [];
       dayDetailList.innerHTML = "";
       if (!events.length) {
-        dayDetailList.innerHTML = '<div class="empty">この日の予定・実績はありません</div>';
+        dayDetailList.innerHTML = '<div class="empty">この日の引落予定はありません</div>';
         return;
       }
       events.forEach(event => {
@@ -2282,22 +2267,10 @@
         element.innerHTML = `
           <strong>${escapeHtml(event.item.content || "内容未設定")}</strong>
           <span>${escapeHtml(event.sourceMonth.label)}・${escapeHtml(event.item.debitAccount || unassignedAccount)}</span>
-          <span>${event.planned ? "引落予定" : ""}${event.planned && event.paid ? "・" : ""}${event.paid ? "支払実績" : ""}</span>
-          <div class="field">
-            <label>支払実績日</label>
-            <input type="date" value="${escapeAttr(event.item.paidDate || "")}" data-day-field="paidDate">
-          </div>
+          <span>${event.item.paid ? "支払い済み" : "引落予定"}</span>
           <button class="secondary" type="button" data-day-action="paid">${event.item.paid ? "未払いに戻す" : "支払い済みにする"}</button>`;
-        element.querySelector('[data-day-field="paidDate"]').addEventListener("change", changeEvent => {
-          event.item.paidDate = normalizeDateValue(changeEvent.currentTarget.value);
-          if (event.item.paidDate) event.item.paid = true;
-          persist();
-          render();
-          renderDayDetails(date);
-        });
         element.querySelector('[data-day-action="paid"]').addEventListener("click", () => {
           event.item.paid = !event.item.paid;
-          if (!event.item.paid) event.item.paidDate = "";
           persist();
           render();
           renderDayDetails(date);
@@ -2601,10 +2574,6 @@
               </div>
               <input inputmode="numeric" maxlength="2" pattern="[0-9]*" value="${escapeAttr(debitDayLabel)}" data-field="debitDate">
             </div>
-            <div class="field entry-field-paid">
-              <label>支払実績日</label>
-              <input type="date" value="${escapeAttr(item.paidDate || "")}" data-field="paidDate">
-            </div>
             <div class="field entry-field-note">
               <label>備考</label>
               <input value="${escapeAttr(item.note)}" data-field="note">
@@ -2614,7 +2583,6 @@
 
       article.querySelector(".check").addEventListener("click", () => {
         item.paid = !item.paid;
-        if (!item.paid) item.paidDate = "";
         persist();
         render();
       });
@@ -2703,11 +2671,6 @@
         item.debitDate = debitDay ? dateFromMonthAndDay(monthId, debitDay) : "";
         return;
       }
-      if (field === "paidDate") {
-        item.paidDate = normalizeDateValue(text);
-        if (item.paidDate) item.paid = true;
-        return;
-      }
       if (field === "amount") {
         item.amount = normalizeAmountValue(text);
         return;
@@ -2730,7 +2693,6 @@
         formatDateLabel(item.usedDate),
         item.usagePeriodStart,
         item.usagePeriodEnd,
-        item.paidDate,
         usagePeriod,
         normalizeBillingCycleMonths(item.billingCycleMonths) > 1 ? billingCycleLabel(item.billingCycleMonths) : "",
         item.content,
