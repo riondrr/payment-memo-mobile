@@ -738,7 +738,7 @@
     }
 
     .entry-field-debit {
-      grid-column: span 7;
+      grid-column: span 6;
     }
 
     .entry-field-debit .debit-date-control {
@@ -760,7 +760,7 @@
     }
 
     .entry-field-note {
-      grid-column: span 3;
+      grid-column: span 4;
     }
 
     .period-actions {
@@ -1224,7 +1224,9 @@
         grid-template-columns: 1fr;
       }
 
-      .entry-field-period {
+      .entry-field-period,
+      .entry-field-debit,
+      .entry-field-note {
         grid-column: 1 / -1;
       }
 
@@ -2588,7 +2590,7 @@
               </div>
               <div class="debit-date-control">
                 <input inputmode="numeric" maxlength="2" pattern="[0-9]*" value="${escapeAttr(debitDayLabel)}" data-field="debitDate">
-                <button class="inline-action" type="button" data-action="previous-debit-date" title="前回の引落日を反映" aria-label="前回の引落日を反映" ${inheritedDebitDate ? "" : "disabled"}>前回と同じ日</button>
+                <button class="inline-action" type="button" data-action="previous-debit-date" title="前回の引落日を反映" ${inheritedDebitDate ? "" : "disabled"}>前回と同じ日</button>
               </div>
             </div>
             <div class="field entry-field-note">

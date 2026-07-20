@@ -1,4 +1,4 @@
-const cacheName = "payment-notes-v22";
+const cacheName = "payment-notes-v23";
 const assets = ["./", "./index.html", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", event => {
@@ -20,6 +20,29 @@ self.addEventListener("fetch", event => {
   const url = new URL(event.request.url);
   if (url.pathname.endsWith("/app-config.js")) {
     event.respondWith(fetch(event.request));
+    return;
+  }
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then(async response => {
+          if (response.ok) {
+            await caches
+              .open(cacheName)
+              .then(cache => cache.put(event.request, response.clone()))
+              .catch(() => {});
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cache = await caches.open(cacheName);
+          return (
+            (await cache.match(event.request)) ||
+            (await cache.match("./index.html")) ||
+            cache.match("./")
+          );
+        })
+    );
     return;
   }
   event.respondWith(
