@@ -998,6 +998,11 @@
       font-weight: 800;
     }
 
+    .danger:disabled {
+      cursor: not-allowed;
+      opacity: .55;
+    }
+
     .secondary {
       height: 44px;
       border: 1px solid #cfc5b7;
@@ -1015,6 +1020,26 @@
 
     .settings-trash-button {
       width: 100%;
+    }
+
+    .settings-delete-month-button {
+      width: 100%;
+    }
+
+    .confirmation-copy {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.65;
+      white-space: pre-line;
+    }
+
+    .confirmation-actions {
+      display: grid;
+      gap: 10px;
+    }
+
+    #confirmSheet {
+      z-index: 25;
     }
 
     .status {
@@ -1408,6 +1433,7 @@
       <button class="icon-button" id="closeSettingsSheetButton" type="button" title="閉じる" aria-label="設定を閉じる">×</button>
     </div>
     <button class="secondary settings-trash-button" id="trashButton" type="button">最近削除</button>
+    <button class="danger settings-delete-month-button" id="deleteMonthButton" type="button">表示中の年月を削除</button>
     <div class="status">
       <strong>クラウド同期</strong>
       <span id="cloudSyncStatus">未接続</span>
@@ -1426,6 +1452,14 @@
     <button class="secondary" id="exportButton" type="button">バックアップを書き出す</button>
     <button class="secondary" id="importButton" type="button">バックアップから復元する</button>
     <a class="secondary settings-link" href="privacy.html">プライバシーポリシー</a>
+  </aside>
+  <aside class="sheet" id="confirmSheet" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="sheet-head">
+      <h2 id="confirmTitle">確認</h2>
+      <button class="icon-button" id="closeConfirmSheetButton" type="button" title="閉じる" aria-label="確認画面を閉じる">×</button>
+    </div>
+    <p class="confirmation-copy" id="confirmMessage"></p>
+    <div class="confirmation-actions" id="confirmActions"></div>
   </aside>
 
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -1493,14 +1527,19 @@
     const settingsSheet = document.getElementById("settingsSheet");
     const trashSheet = document.getElementById("trashSheet");
     const daySheet = document.getElementById("daySheet");
+    const confirmSheet = document.getElementById("confirmSheet");
     const trashList = document.getElementById("trashList");
     const trashError = document.getElementById("trashError");
+    const confirmTitle = document.getElementById("confirmTitle");
+    const confirmMessage = document.getElementById("confirmMessage");
+    const confirmActions = document.getElementById("confirmActions");
     const daySheetTitle = document.getElementById("daySheetTitle");
     const dayDetailList = document.getElementById("dayDetailList");
     const scrim = document.getElementById("scrim");
     const form = document.getElementById("entryForm");
     const monthForm = document.getElementById("monthForm");
     const deleteButton = document.getElementById("deleteEntryButton");
+    const deleteMonthButton = document.getElementById("deleteMonthButton");
     const sheetTitle = document.getElementById("sheetTitle");
     const yearInput = document.getElementById("yearInput");
     const monthInput = document.getElementById("monthInput");
@@ -1536,6 +1575,7 @@
     document.getElementById("closeSettingsSheetButton").addEventListener("click", closeSettingsSheet);
     document.getElementById("closeTrashSheetButton").addEventListener("click", closeTrashSheet);
     document.getElementById("closeDaySheetButton").addEventListener("click", closeDaySheet);
+    document.getElementById("closeConfirmSheetButton").addEventListener("click", closeConfirmSheet);
     document.getElementById("exportButton").addEventListener("click", exportJson);
     document.getElementById("importButton").addEventListener("click", () => importInput.click());
     importInput.addEventListener("change", importJson);
@@ -1547,6 +1587,7 @@
     form.addEventListener("submit", saveEntry);
     monthForm.addEventListener("submit", addSelectedMonth);
     deleteButton.addEventListener("click", deleteEntry);
+    deleteMonthButton.addEventListener("click", requestMonthDeletion);
     paymentTypeInput.addEventListener("change", syncPaymentMethodField);
     debitAccountInput.addEventListener("change", syncDebitAccountField);
     billingCycleInput.addEventListener("change", syncBillingCycleField);
@@ -1604,7 +1645,7 @@
         ? normalized.activeMonth
         : normalized.months[0]?.id || seed.activeMonth;
       normalized.updatedAt = normalized.updatedAt || new Date().toISOString();
-      normalized.schemaVersion = 9;
+      normalized.schemaVersion = 10;
       return normalized;
     }
 
@@ -1612,13 +1653,42 @@
       const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
       return (Array.isArray(value) ? value : [])
         .filter(entry => entry && new Date(entry.deletedAt).getTime() >= cutoff)
-        .map(entry => ({
-          id: String(entry.id || crypto.randomUUID()),
-          deletedAt: entry.deletedAt,
-          monthId: String(entry.monthId || ""),
-          monthLabel: String(entry.monthLabel || formatMonthLabel(entry.monthId)),
-          item: normalizeItem(entry.item, entry.monthId)
-        }));
+        .map(entry => normalizeTrashEntry(entry))
+        .filter(Boolean);
+    }
+
+    function normalizeTrashEntry(entry) {
+      const base = {
+        id: String(entry.id || crypto.randomUUID()),
+        deletedAt: entry.deletedAt
+      };
+      if (entry.kind === "month" && entry.month) {
+        return { ...base, kind: "month", month: normalizeMonth(entry.month) };
+      }
+      if (entry.kind === "series" && Array.isArray(entry.entries)) {
+        const entries = entry.entries
+          .filter(value => value?.item && value?.monthId)
+          .map(value => ({
+            monthId: String(value.monthId),
+            monthLabel: String(value.monthLabel || formatMonthLabel(value.monthId)),
+            item: normalizeItem(value.item, value.monthId)
+          }));
+        if (!entries.length) return null;
+        return {
+          ...base,
+          kind: "series",
+          label: String(entry.label || entries[0].item.content || "支払い方法"),
+          entries
+        };
+      }
+      if (!entry.item || !entry.monthId) return null;
+      return {
+        ...base,
+        kind: "item",
+        monthId: String(entry.monthId),
+        monthLabel: String(entry.monthLabel || formatMonthLabel(entry.monthId)),
+        item: normalizeItem(entry.item, entry.monthId)
+      };
     }
 
     function normalizeMonth(month) {
@@ -1633,15 +1703,23 @@
 
     function dedupeMonthItems(items) {
       const bySeries = new Map();
+      const bySignature = new Map();
+      const result = [];
       items.forEach(item => {
         const seriesId = String(item.seriesId || item.id);
-        if (!bySeries.has(seriesId)) {
+        const signature = automaticCopySignature(item);
+        const existing = bySeries.get(seriesId) || bySignature.get(signature);
+        if (!existing) {
+          result.push(item);
           bySeries.set(seriesId, item);
+          bySignature.set(signature, item);
           return;
         }
-        mergeDuplicateItem(bySeries.get(seriesId), item);
+        mergeDuplicateItem(existing, item);
+        bySeries.set(seriesId, existing);
+        bySignature.set(signature, existing);
       });
-      return Array.from(bySeries.values());
+      return result;
     }
 
     function mergeDuplicateItem(target, duplicate) {
@@ -1665,14 +1743,22 @@
         pushUnique(knownAccounts, item.debitAccount || unassignedAccount);
         pushUnique(knownSeries, item.seriesId || item.id);
       }));
-      trash.forEach(entry => {
-        pushUnique(knownAccounts, entry.item.debitAccount || unassignedAccount);
-        pushUnique(knownSeries, entry.item.seriesId || entry.item.id);
+      trashItems(trash).forEach(item => {
+        pushUnique(knownAccounts, item.debitAccount || unassignedAccount);
+        pushUnique(knownSeries, item.seriesId || item.id);
       });
       return {
         accounts: normalizeOrderList(value?.accounts, knownAccounts),
         series: normalizeOrderList(value?.series, knownSeries)
       };
+    }
+
+    function trashItems(trash) {
+      return trash.flatMap(entry => {
+        if (entry.kind === "month") return entry.month.items;
+        if (entry.kind === "series") return entry.entries.map(value => value.item);
+        return entry.item ? [entry.item] : [];
+      });
     }
 
     function normalizeOrderList(value, knownValues) {
@@ -2178,7 +2264,20 @@
       renderView();
       renderCalendar();
       trashButton.textContent = state.trash.length ? `最近削除 (${state.trash.length})` : "最近削除";
+      renderSettingsActions();
       renderSummary();
+    }
+
+    function renderSettingsActions() {
+      const month = currentMonth();
+      const isLastMonth = state.months.length <= 1;
+      deleteMonthButton.textContent = month
+        ? isLastMonth
+          ? `${month.label}は削除できません（最後の年月）`
+          : `${month.label}を削除`
+        : "表示中の年月を削除";
+      deleteMonthButton.disabled = isLastMonth;
+      deleteMonthButton.title = isLastMonth ? "最後の1か月は削除できません" : "";
     }
 
     function setActiveView(view) {
@@ -2773,15 +2872,15 @@
 
     function renderAccountOptions(selectedAccount = "") {
       debitAccountInput.innerHTML = "";
-      debitAccountInput.add(new Option("既存の口座から選択", ""));
+      debitAccountInput.add(new Option("新しい口座を入力", "__custom__"));
       accountValues().forEach(account => {
         debitAccountInput.add(new Option(account, account, false, account === selectedAccount));
       });
-      debitAccountInput.add(new Option("新しい口座を入力", "__custom__"));
-      if (selectedAccount && !accountValues().includes(selectedAccount)) {
+      debitAccountInput.add(new Option(unassignedAccount, unassignedAccount, false, selectedAccount === unassignedAccount));
+      if (selectedAccount && !["__custom__", unassignedAccount].includes(selectedAccount) && !accountValues().includes(selectedAccount)) {
         debitAccountInput.add(new Option(selectedAccount, selectedAccount, true, true), 1);
       }
-      debitAccountInput.value = selectedAccount || "";
+      debitAccountInput.value = selectedAccount || "__custom__";
       syncDebitAccountField();
     }
 
@@ -2830,6 +2929,10 @@
     }
 
     function closeOpenSheet() {
+      if (confirmSheet.classList.contains("open")) {
+        closeConfirmSheet();
+        return;
+      }
       if (daySheet.classList.contains("open")) {
         closeDaySheet();
         return;
@@ -2876,9 +2979,10 @@
       state.trash.slice().sort((a, b) => b.deletedAt.localeCompare(a.deletedAt)).forEach(entry => {
         const element = document.createElement("div");
         element.className = "trash-item";
+        const details = trashEntryDetails(entry);
         element.innerHTML = `
-          <strong>${escapeHtml(entry.item.content || "内容未設定")}</strong>
-          <span>${escapeHtml(entry.monthLabel)}・${escapeHtml(entry.item.debitAccount || unassignedAccount)}</span>
+          <strong>${escapeHtml(details.title)}</strong>
+          <span>${escapeHtml(details.description)}</span>
           <span>削除: ${escapeHtml(formatDateTime(entry.deletedAt))}</span>
           <div class="trash-item-actions">
             <button class="secondary" type="button" data-trash-action="restore">復元</button>
@@ -2890,26 +2994,124 @@
       });
     }
 
+    function trashEntryDetails(entry) {
+      if (entry.kind === "month") {
+        return {
+          title: entry.month.label,
+          description: `年月全体・支払い方法 ${entry.month.items.length}件`
+        };
+      }
+      if (entry.kind === "series") {
+        return {
+          title: entry.label || "支払い方法",
+          description: `全年月から削除・${entry.entries.length}か月分`
+        };
+      }
+      return {
+        title: entry.item.content || "内容未設定",
+        description: `${entry.monthLabel}・${entry.item.debitAccount || unassignedAccount}`
+      };
+    }
+
     function restoreTrashItem(id) {
       const entry = state.trash.find(item => item.id === id);
-      const month = state.months.find(item => item.id === entry?.monthId);
-      if (!entry || !month) return;
-      if (month.items.some(item => String(item.seriesId) === String(entry.item.seriesId))) {
-        trashError.textContent = "同じ支払い方法が既に存在するため復元できません。";
-        trashError.classList.add("show");
-        return;
+      if (!entry) return;
+      let restored = true;
+      if (entry.kind === "month") {
+        restoreDeletedMonth(entry);
+      } else if (entry.kind === "series") {
+        entry.entries.forEach(value => restoreItemToMonth(value.monthId, value.monthLabel, value.item, true));
+      } else {
+        restored = restoreItemToMonth(entry.monthId, entry.monthLabel, entry.item, false);
       }
-      month.items.push(normalizeItem(entry.item, month.id));
+      if (!restored) return;
       state.trash = state.trash.filter(item => item.id !== id);
+      state.months.sort((a, b) => a.id.localeCompare(b.id));
       persist();
       renderTrash();
       render();
+    }
+
+    function restoreDeletedMonth(entry) {
+      const restored = normalizeMonth(entry.month);
+      const existing = state.months.find(month => month.id === restored.id);
+      if (existing) {
+        existing.items = dedupeMonthItems([...existing.items, ...restored.items]);
+      } else {
+        state.months.push(restored);
+      }
+      state.activeMonth = restored.id;
+    }
+
+    function restoreItemToMonth(monthId, monthLabel, item, createMissingMonth) {
+      let month = state.months.find(value => value.id === monthId);
+      if (!month && createMissingMonth) {
+        month = { id: monthId, label: monthLabel || formatMonthLabel(monthId), items: [] };
+        state.months.push(month);
+      }
+      if (!month) {
+        trashError.textContent = "復元先の年月がありません。先に年月を復元してください。";
+        trashError.classList.add("show");
+        return false;
+      }
+      const restored = normalizeItem(item, month.id);
+      const signature = automaticCopySignature(restored);
+      const existing = month.items.find(value =>
+        String(value.seriesId) === String(restored.seriesId) ||
+        automaticCopySignature(value) === signature
+      );
+      if (existing) {
+        mergeDuplicateItem(existing, restored);
+      } else {
+        month.items.push(restored);
+      }
+      return true;
     }
 
     function permanentlyDeleteTrashItem(id) {
       state.trash = state.trash.filter(item => item.id !== id);
       persist();
       renderTrash();
+      render();
+    }
+
+    function requestMonthDeletion() {
+      const month = currentMonth();
+      if (!month) return;
+      if (state.months.length <= 1) {
+        deleteMonthButton.title = "最後の1か月は削除できません";
+        return;
+      }
+      openConfirmation({
+        title: `${month.label}を削除`,
+        message: `${month.label}と、その月の支払い方法 ${month.items.length}件を削除します。\n削除後30日間は「最近削除」から復元できます。`,
+        actions: [{
+          label: "年月ごと削除",
+          className: "danger",
+          handler: () => deleteMonth(month.id)
+        }]
+      });
+    }
+
+    function deleteMonth(monthId) {
+      if (state.months.length <= 1) return;
+      const month = state.months.find(value => value.id === monthId);
+      if (!month) return;
+      state.trash.push({
+        id: crypto.randomUUID(),
+        kind: "month",
+        deletedAt: new Date().toISOString(),
+        month: structuredClone(month)
+      });
+      state.months = state.months.filter(value => value.id !== monthId);
+      const sortedMonths = state.months.slice().sort((a, b) => a.id.localeCompare(b.id));
+      state.activeMonth = sortedMonths.find(value => value.id > monthId)?.id || sortedMonths.at(-1).id;
+      expandedMonthlyTables.delete(monthId);
+      Array.from(collapsedAccountGroups).forEach(key => {
+        if (key.startsWith(`${monthId}\u0000`)) collapsedAccountGroups.delete(key);
+      });
+      closeSettingsSheet();
+      persist();
       render();
     }
 
@@ -2972,7 +3174,7 @@
       sheetTitle.textContent = item ? "明細の詳細" : "明細を追加";
       deleteButton.style.display = item ? "block" : "none";
       clearEntryError();
-      renderAccountOptions(item?.debitAccount || "");
+      renderAccountOptions(item ? item.debitAccount || unassignedAccount : "__custom__");
       customDebitAccountInput.value = "";
       paymentTypeInput.value = normalizePaymentType(item?.paymentType);
       paymentMethodInput.value = item?.paymentMethod || "";
@@ -2991,10 +3193,10 @@
       scrim.classList.add("open");
       sheet.setAttribute("aria-hidden", "false");
       sheet.scrollTop = 0;
-      debitAccountInput.focus();
     }
 
     function openSettingsSheet() {
+      renderSettingsActions();
       settingsSheet.classList.add("open");
       scrim.classList.add("open");
       settingsSheet.setAttribute("aria-hidden", "false");
@@ -3014,6 +3216,42 @@
       form.reset();
       clearEntryError();
       editingId = null;
+    }
+
+    function openConfirmation({ title, message, actions }) {
+      confirmTitle.textContent = title;
+      confirmMessage.textContent = message;
+      confirmActions.replaceChildren();
+      actions.forEach(action => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = action.className || "danger";
+        button.textContent = action.label;
+        button.addEventListener("click", () => {
+          closeConfirmSheet();
+          action.handler();
+        });
+        confirmActions.appendChild(button);
+      });
+      const cancelButton = document.createElement("button");
+      cancelButton.type = "button";
+      cancelButton.className = "secondary";
+      cancelButton.textContent = "キャンセル";
+      cancelButton.addEventListener("click", closeConfirmSheet);
+      confirmActions.appendChild(cancelButton);
+      confirmSheet.classList.add("open");
+      scrim.classList.add("open");
+      confirmSheet.setAttribute("aria-hidden", "false");
+      confirmSheet.scrollTop = 0;
+    }
+
+    function closeConfirmSheet() {
+      confirmSheet.classList.remove("open");
+      confirmSheet.setAttribute("aria-hidden", "true");
+      confirmActions.replaceChildren();
+      if (!document.querySelector(".sheet.open")) {
+        scrim.classList.remove("open");
+      }
     }
 
     function saveEntry(event) {
@@ -3118,16 +3356,73 @@
       if (!editingId) return;
       const month = currentMonth();
       const item = month.items.find(entry => entry.id === editingId);
-      if (item) {
-        state.trash.push({
-          id: crypto.randomUUID(),
-          deletedAt: new Date().toISOString(),
-          monthId: month.id,
-          monthLabel: month.label,
-          item: structuredClone(item)
+      if (!item) return;
+      const label = item.content || item.paymentMethod || "支払い方法";
+      openConfirmation({
+        title: `${label}を削除`,
+        message: "削除する範囲を選んでください。削除後30日間は「最近削除」から復元できます。",
+        actions: [
+          {
+            label: "この月だけ削除",
+            className: "danger",
+            handler: () => deleteEntryFromCurrentMonth(item.id)
+          },
+          {
+            label: "全年月から削除",
+            className: "danger",
+            handler: () => deleteEntryFromAllMonths(item)
+          }
+        ]
+      });
+    }
+
+    function deleteEntryFromCurrentMonth(itemId) {
+      const month = currentMonth();
+      const item = month.items.find(entry => entry.id === itemId);
+      if (!item) return;
+      state.trash.push({
+        id: crypto.randomUUID(),
+        kind: "item",
+        deletedAt: new Date().toISOString(),
+        monthId: month.id,
+        monthLabel: month.label,
+        item: structuredClone(item)
+      });
+      month.items = month.items.filter(entry => entry.id !== itemId);
+      persist();
+      closeSheet();
+      render();
+    }
+
+    function deleteEntryFromAllMonths(targetItem) {
+      const seriesId = String(targetItem.seriesId || targetItem.id);
+      const signature = automaticCopySignature(targetItem);
+      const deletedEntries = [];
+      state.months.forEach(month => {
+        const keptItems = [];
+        month.items.forEach(item => {
+          const matches = String(item.seriesId || item.id) === seriesId ||
+            automaticCopySignature(item) === signature;
+          if (matches) {
+            deletedEntries.push({
+              monthId: month.id,
+              monthLabel: month.label,
+              item: structuredClone(item)
+            });
+          } else {
+            keptItems.push(item);
+          }
         });
-      }
-      month.items = month.items.filter(item => item.id !== editingId);
+        month.items = keptItems;
+      });
+      if (!deletedEntries.length) return;
+      state.trash.push({
+        id: crypto.randomUUID(),
+        kind: "series",
+        deletedAt: new Date().toISOString(),
+        label: targetItem.content || targetItem.paymentMethod || "支払い方法",
+        entries: deletedEntries
+      });
       persist();
       closeSheet();
       render();
