@@ -1,5 +1,5 @@
-const cacheName = "payment-notes-v24";
-const assets = ["./", "./index.html", "./manifest.json", "./icon.svg"];
+const cacheName = "payment-notes-v26";
+const assets = ["/", "/index.html", "/manifest.json", "/icon.svg"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)));
@@ -38,8 +38,8 @@ self.addEventListener("fetch", event => {
           const cache = await caches.open(cacheName);
           return (
             (await cache.match(event.request)) ||
-            (await cache.match("./index.html")) ||
-            cache.match("./")
+            (await cache.match("/index.html")) ||
+            cache.match("/")
           );
         })
     );

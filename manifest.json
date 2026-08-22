@@ -1,7 +1,9 @@
 {
   "name": "口座別引落 月別管理",
   "short_name": "引落メモ",
-  "start_url": "./index.html",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f8fcff",
   "theme_color": "#1976b9",
