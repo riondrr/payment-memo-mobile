@@ -154,6 +154,8 @@ revoke all on public.monthly_payments from anon, authenticated;
 revoke all on public.purchase_events from anon, authenticated;
 revoke all on sequence public.purchase_events_id_seq from anon, authenticated;
 
+grant select, insert, update, delete on public.user_states to authenticated;
+
 revoke execute on function public.set_updated_at() from public, anon, authenticated;
 revoke execute on function public.create_profile_for_new_user() from public, anon, authenticated;
 revoke execute on function public.enforce_account_limit() from public, anon, authenticated;

@@ -3434,14 +3434,35 @@
       render();
     }
 
-    function exportJson() {
-      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    async function exportJson() {
+      const backupText = JSON.stringify(state, null, 2);
+      const blob = new Blob([backupText], { type: "application/json" });
+      const file = new File([blob], "payment-notes.json", { type: "application/json" });
+
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: "引落メモのバックアップ"
+          });
+          return;
+        } catch (error) {
+          if (error?.name === "AbortError") return;
+          console.warn(error);
+        }
+      }
+
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = "payment-notes.json";
+      anchor.hidden = true;
+      document.body.appendChild(anchor);
       anchor.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      }, 30000);
     }
 
     async function importJson(event) {
