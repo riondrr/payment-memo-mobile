@@ -1,4 +1,4 @@
-const cacheName = "payment-notes-v27";
+const cacheName = "payment-notes-v28";
 const assets = ["/", "/index.html", "/manifest.json", "/icon.svg"];
 
 self.addEventListener("install", event => {

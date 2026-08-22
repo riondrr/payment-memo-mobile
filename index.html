@@ -2238,11 +2238,18 @@
       const userStorageKey = storageKeyForUser(user);
       if (activeStorageKey === userStorageKey) return;
 
+      const anonymousState = readStoredState(storageKey);
       activeStorageKey = userStorageKey;
       const saved = readStoredState(userStorageKey);
       if (saved) {
         activeStateSource = "user";
         replaceState(saved, saved.updatedAt);
+        return;
+      }
+
+      if (anonymousState) {
+        activeStateSource = "anonymous-migration";
+        replaceState(anonymousState, anonymousState.updatedAt);
         return;
       }
 
@@ -3574,7 +3581,7 @@
         const { error } = await supabaseClient.auth.signInWithOtp({
           email,
           options: {
-            emailRedirectTo: config.supabaseRedirectUrl || `${location.origin}${location.pathname}`
+            emailRedirectTo: authRedirectUrl()
           }
         });
         if (error) throw error;
@@ -3593,6 +3600,17 @@
         magicLinkRequestPending = false;
         updateCloudSyncControls();
       }
+    }
+
+    function authRedirectUrl() {
+      const productionHosts = new Set([
+        "payment-memo-mobile.pages.dev",
+        "riondrr.github.io"
+      ]);
+      if (location.protocol === "https:" && productionHosts.has(location.hostname)) {
+        return `${location.origin}${location.pathname}`;
+      }
+      return config.supabaseRedirectUrl || `${location.origin}${location.pathname}`;
     }
 
     function startMagicLinkCooldown(seconds) {
