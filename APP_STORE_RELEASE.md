@@ -76,8 +76,9 @@ References:
 1. Create a Supabase project.
 2. Run `supabase-schema.sql` in the Supabase SQL editor.
 3. Add the project URL and publishable key to the native build configuration.
-4. Use Supabase Auth for login. Email magic link is enough for an initial
-   release. Sign in with Apple is also supported by Supabase Auth.
+4. Use Supabase Auth email OTP for login so an installed web app can complete
+   authentication without handing its session to Safari. Sign in with Apple is
+   also supported by Supabase Auth.
 5. Sync accounts and monthly payments through the Supabase client with the
    authenticated user's access token. Row Level Security isolates each user's
    rows.

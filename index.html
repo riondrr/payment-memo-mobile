@@ -1083,6 +1083,21 @@
       height: 40px;
     }
 
+    .otp-input {
+      text-align: center;
+      letter-spacing: .32em;
+      font-size: 20px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 800;
+    }
+
+    .field-hint {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
     .primary:disabled,
     .secondary:disabled {
       cursor: not-allowed;
@@ -1439,14 +1454,20 @@
     <button class="danger settings-delete-month-button" id="deleteMonthButton" type="button">表示中の年月を削除</button>
     <div class="status">
       <strong>クラウド同期</strong>
-      <span id="cloudSyncStatus">未接続</span>
+      <span id="cloudSyncStatus" role="status" aria-live="polite">未接続</span>
     </div>
     <div class="sync-panel">
       <div class="field">
         <label for="emailInput">メールアドレス</label>
         <input id="emailInput" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com">
       </div>
-      <button class="primary" id="signInButton" type="button">メールリンクでログイン</button>
+      <button class="primary" id="sendOtpButton" type="button">認証コードを送信</button>
+      <div class="field">
+        <label for="otpInput">6桁の認証コード</label>
+        <input class="otp-input" id="otpInput" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="123456" aria-describedby="otpHelp">
+        <p class="field-hint" id="otpHelp">メールに届いた最新のコードを10分以内に入力してください。</p>
+      </div>
+      <button class="primary" id="verifyOtpButton" type="button">コードでログイン</button>
       <div class="sync-actions">
         <button class="secondary" id="syncNowButton" type="button">今すぐ同期</button>
         <button class="secondary" id="signOutButton" type="button">ログアウト</button>
@@ -1465,7 +1486,10 @@
     <div class="confirmation-actions" id="confirmActions"></div>
   </aside>
 
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script
+    src="https://unpkg.com/@supabase/supabase-js@2.111.0/dist/umd/supabase.js"
+    integrity="sha384-faMlYZUtkJj+Sh6Bmu/L0GzPcraRWN6CW+9RH3GUrK/Z0WS9tgaNNt0tHiLxsbdb"
+    crossorigin="anonymous"></script>
   <script src="app-config.js"></script>
   <script>
     const unassignedAccount = "引落口座未設定";
@@ -1511,9 +1535,12 @@
     let supabaseClient = null;
     let currentSession = null;
     let syncTimer = null;
-    let magicLinkRequestPending = false;
-    let magicLinkCooldownUntil = 0;
-    let magicLinkCooldownTimer = null;
+    let otpRequestPending = false;
+    let otpVerifyPending = false;
+    let otpCooldownUntil = 0;
+    let otpCooldownTimer = null;
+    let otpHasBeenSent = false;
+    const otpResendCooldownSeconds = 60;
 
     const tabs = document.getElementById("monthTabs");
     const list = document.getElementById("entryList");
@@ -1552,7 +1579,9 @@
     const monthError = document.getElementById("monthError");
     const importInput = document.getElementById("importInput");
     const emailInput = document.getElementById("emailInput");
-    const signInButton = document.getElementById("signInButton");
+    const sendOtpButton = document.getElementById("sendOtpButton");
+    const otpInput = document.getElementById("otpInput");
+    const verifyOtpButton = document.getElementById("verifyOtpButton");
     const signOutButton = document.getElementById("signOutButton");
     const syncNowButton = document.getElementById("syncNowButton");
     const debitAccountInput = document.getElementById("debitAccountInput");
@@ -1598,7 +1627,13 @@
     debitAccountInput.addEventListener("change", syncDebitAccountField);
     billingCycleInput.addEventListener("change", syncBillingCycleField);
     monthlyTableToggle.addEventListener("click", toggleMonthlyTable);
-    signInButton.addEventListener("click", sendMagicLink);
+    sendOtpButton.addEventListener("click", sendEmailOtp);
+    verifyOtpButton.addEventListener("click", verifyEmailOtp);
+    emailInput.addEventListener("input", updateCloudSyncControls);
+    otpInput.addEventListener("input", normalizeOtpInput);
+    otpInput.addEventListener("keydown", event => {
+      if (event.key === "Enter" && !verifyOtpButton.disabled) verifyEmailOtp();
+    });
     signOutButton.addEventListener("click", signOut);
     syncNowButton.addEventListener("click", () => syncState());
 
@@ -3554,11 +3589,11 @@
       );
     }
 
-    async function sendMagicLink() {
+    async function sendEmailOtp() {
       if (!isCloudSyncConfigured() || !supabaseClient) return;
-      if (magicLinkRequestPending) return;
+      if (otpRequestPending || currentSession) return;
 
-      const cooldownSeconds = Math.ceil((magicLinkCooldownUntil - Date.now()) / 1000);
+      const cooldownSeconds = otpCooldownSecondsRemaining();
       if (cooldownSeconds > 0) {
         renderIntegrationStatus(`メールの再送はあと${cooldownSeconds}秒お待ちください。`);
         return;
@@ -3576,51 +3611,122 @@
       }
 
       try {
-        magicLinkRequestPending = true;
-        renderIntegrationStatus("ログインリンクを送信中...");
+        otpRequestPending = true;
+        updateCloudSyncControls();
+        renderIntegrationStatus("認証コードを送信中...");
         const { error } = await supabaseClient.auth.signInWithOtp({
           email,
           options: {
-            emailRedirectTo: authRedirectUrl()
+            shouldCreateUser: true
           }
         });
         if (error) throw error;
-        startMagicLinkCooldown(3);
-        renderIntegrationStatus("ログイン用メールを送信しました。リンクを開いてください。");
+        otpHasBeenSent = true;
+        otpInput.value = "";
+        startOtpCooldown(otpResendCooldownSeconds);
+        otpInput.focus();
+        renderIntegrationStatus("6桁の認証コードを送信しました。最新のコードを入力してください。");
       } catch (error) {
         const retryMatch = String(error?.message || "").match(/after\s+(\d+)\s+seconds?/i);
         if (retryMatch) {
-          const retrySeconds = Math.max(1, Number(retryMatch[1]) || 3);
-          startMagicLinkCooldown(retrySeconds);
+          const retrySeconds = Math.max(1, Number(retryMatch[1]) || otpResendCooldownSeconds);
+          startOtpCooldown(retrySeconds);
           renderIntegrationStatus(`メールの再送は${retrySeconds}秒後にお試しください。`);
         } else {
-          handleSyncError(error);
+          handleOtpError(error, "認証コードを送信できませんでした。時間を置いて再度お試しください。");
         }
       } finally {
-        magicLinkRequestPending = false;
+        otpRequestPending = false;
         updateCloudSyncControls();
       }
     }
 
-    function authRedirectUrl() {
-      const productionHosts = new Set([
-        "payment-memo-mobile.pages.dev",
-        "riondrr.github.io"
-      ]);
-      if (location.protocol === "https:" && productionHosts.has(location.hostname)) {
-        return `${location.origin}${location.pathname}`;
+    async function verifyEmailOtp() {
+      if (!isCloudSyncConfigured() || !supabaseClient) return;
+      if (otpVerifyPending || currentSession) return;
+
+      const email = emailInput.value.trim();
+      const token = otpInput.value.trim();
+      if (!email || !emailInput.checkValidity()) {
+        renderIntegrationStatus("有効なメールアドレスを入力してください。");
+        return;
       }
-      return config.supabaseRedirectUrl || `${location.origin}${location.pathname}`;
+      if (!/^\d{6}$/.test(token)) {
+        renderIntegrationStatus("メールに届いた6桁の認証コードを入力してください。");
+        otpInput.focus();
+        return;
+      }
+
+      try {
+        otpVerifyPending = true;
+        updateCloudSyncControls();
+        renderIntegrationStatus("認証コードを確認中...");
+        const { data, error } = await supabaseClient.auth.verifyOtp({
+          email,
+          token,
+          type: "email"
+        });
+        if (error) throw error;
+        if (!data?.session) throw new Error("session_not_created");
+
+        otpInput.value = "";
+        otpHasBeenSent = false;
+        if (!currentSession) {
+          currentSession = data.session;
+          emailInput.value = data.session.user.email || email;
+          switchToUserStorage(data.session.user);
+          render();
+          await syncState();
+        }
+        renderIntegrationStatus("認証しました。クラウド同期に接続済みです。");
+      } catch (error) {
+        handleOtpError(error, "認証コードが正しくないか、期限が切れています。最新のコードを再送してください。");
+      } finally {
+        otpVerifyPending = false;
+        updateCloudSyncControls();
+      }
     }
 
-    function startMagicLinkCooldown(seconds) {
-      magicLinkCooldownUntil = Date.now() + (seconds * 1000);
-      clearTimeout(magicLinkCooldownTimer);
+    function normalizeOtpInput() {
+      otpInput.value = otpInput.value.replace(/\D/g, "").slice(0, 6);
       updateCloudSyncControls();
-      magicLinkCooldownTimer = setTimeout(() => {
-        magicLinkCooldownUntil = 0;
+    }
+
+    function otpCooldownSecondsRemaining() {
+      return Math.max(0, Math.ceil((otpCooldownUntil - Date.now()) / 1000));
+    }
+
+    function startOtpCooldown(seconds) {
+      otpCooldownUntil = Date.now() + (seconds * 1000);
+      clearTimeout(otpCooldownTimer);
+
+      const tick = () => {
+        if (otpCooldownSecondsRemaining() <= 0) {
+          otpCooldownUntil = 0;
+          updateCloudSyncControls();
+          return;
+        }
         updateCloudSyncControls();
-      }, seconds * 1000);
+        otpCooldownTimer = setTimeout(tick, 1000);
+      };
+      tick();
+    }
+
+    function handleOtpError(error, fallbackMessage) {
+      const code = String(error?.code || "");
+      const message = String(error?.message || "");
+      const status = Number(error?.status || 0);
+      console.warn("OTP authentication failed", { code, status });
+
+      if (code === "otp_expired" || /expired|invalid.*token|token.*invalid/i.test(message)) {
+        renderIntegrationStatus("認証コードが正しくないか、期限が切れています。最新のコードを再送してください。");
+      } else if (status === 429 || /rate limit|too many/i.test(message)) {
+        renderIntegrationStatus("試行回数が多すぎます。しばらく待ってから再度お試しください。");
+      } else if (/email address not authorized/i.test(message)) {
+        renderIntegrationStatus("このメールアドレスには認証メールを送信できません。メール送信設定を確認してください。");
+      } else {
+        renderIntegrationStatus(fallbackMessage);
+      }
     }
 
     async function signOut() {
@@ -3629,6 +3735,10 @@
         const { error } = await supabaseClient.auth.signOut();
         if (error) throw error;
         clearTimeout(syncTimer);
+        clearTimeout(otpCooldownTimer);
+        otpCooldownUntil = 0;
+        otpHasBeenSent = false;
+        otpInput.value = "";
         currentSession = null;
         switchToAnonymousStorage();
         render();
@@ -3715,7 +3825,7 @@
       const defaultMessage = configured
         ? connected
           ? `接続済み: ${currentSession.user.email || "ログイン中"}`
-          : "未ログイン。メールリンクでログインできます。"
+          : "未ログイン。メールに届く6桁コードでログインできます。"
         : "Supabase設定が必要です。設定後もローカル保存は使えます。";
 
       document.getElementById("cloudSyncStatus").textContent = message || defaultMessage;
@@ -3726,10 +3836,20 @@
     function updateCloudSyncControls() {
       const configured = isCloudSyncConfigured();
       const connected = Boolean(currentSession);
-      const coolingDown = Date.now() < magicLinkCooldownUntil;
+      const cooldownSeconds = otpCooldownSecondsRemaining();
+      const busy = otpRequestPending || otpVerifyPending;
+      const emailReady = Boolean(emailInput.value.trim()) && emailInput.checkValidity();
+      const otpReady = /^\d{6}$/.test(otpInput.value);
 
-      emailInput.disabled = !configured || connected;
-      signInButton.disabled = !configured || connected || magicLinkRequestPending || coolingDown;
+      emailInput.disabled = !configured || connected || busy;
+      sendOtpButton.disabled = !configured || connected || busy || !emailReady || cooldownSeconds > 0;
+      sendOtpButton.textContent = cooldownSeconds > 0
+        ? `再送まで ${cooldownSeconds}秒`
+        : otpHasBeenSent
+          ? "認証コードを再送"
+          : "認証コードを送信";
+      otpInput.disabled = !configured || connected || busy;
+      verifyOtpButton.disabled = !configured || connected || busy || !emailReady || !otpReady;
       signOutButton.disabled = !configured || !connected;
       syncNowButton.disabled = !configured || !connected;
     }
