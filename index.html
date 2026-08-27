@@ -1106,6 +1106,65 @@
       width: 100%;
     }
 
+    .payment-method-list {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .payment-method-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      background: var(--panel);
+    }
+
+    .payment-method-table th,
+    .payment-method-table td {
+      border: 1px solid var(--line);
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .payment-method-table th {
+      background: #f4efe7;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .payment-method-table th:first-child {
+      width: 52%;
+    }
+
+    .payment-method-table input {
+      width: 100%;
+      min-width: 0;
+      height: 38px;
+      border: 1px solid #cfc5b7;
+      border-radius: 7px;
+      background: #fff;
+      padding: 0 9px;
+      color: var(--ink);
+    }
+
+    .payment-method-table input[aria-invalid="true"] {
+      border-color: var(--rose);
+      box-shadow: 0 0 0 2px rgba(169, 68, 66, .12);
+    }
+
+    .payment-method-list-help {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    #paymentMethodsSheet {
+      display: grid;
+      gap: 12px;
+    }
+
     .confirmation-copy {
       margin: 0;
       color: var(--muted);
@@ -1470,6 +1529,11 @@
         <input id="contentInput" required>
       </div>
       <div class="field">
+        <label for="paymentStartInput">作成日・加入日</label>
+        <input id="paymentStartInput" inputmode="numeric" placeholder="2026-06 または 2026-06-15" aria-describedby="paymentStartHelp">
+        <p class="field-hint" id="paymentStartHelp">不明な場合は空欄にすると、すべての年月に表示されます。</p>
+      </div>
+      <div class="field">
         <label for="billingCycleInput">支払い周期</label>
         <select id="billingCycleInput">
           <option value="1">毎月</option>
@@ -1536,6 +1600,7 @@
       <h2>設定</h2>
       <button class="icon-button" id="closeSettingsSheetButton" type="button" title="閉じる" aria-label="設定を閉じる">×</button>
     </div>
+    <button class="secondary" id="paymentMethodsButton" type="button">支払い方法一覧</button>
     <button class="secondary settings-trash-button" id="trashButton" type="button">最近削除</button>
     <button class="danger settings-delete-month-button" id="deleteMonthButton" type="button">表示中の年月を削除</button>
     <div class="status">
@@ -1563,6 +1628,16 @@
     <button class="secondary" id="importButton" type="button">バックアップから復元する</button>
     <a class="secondary settings-link" href="privacy.html">プライバシーポリシー</a>
   </aside>
+  <aside class="sheet" id="paymentMethodsSheet" aria-hidden="true">
+    <div class="sheet-head">
+      <h2>支払い方法一覧</h2>
+      <button class="icon-button" id="closePaymentMethodsSheetButton" type="button" title="閉じる" aria-label="支払い方法一覧を閉じる">×</button>
+    </div>
+    <p class="payment-method-list-help">開始日は「2026-06」または「2026-06-15」の形式で入力できます。空欄の場合はすべての年月に表示します。</p>
+    <p class="form-error" id="paymentMethodsError" role="alert"></p>
+    <div class="payment-method-list" id="paymentMethodList"></div>
+    <button class="primary" id="addPaymentMethodFromListButton" type="button">支払い方法を追加</button>
+  </aside>
   <aside class="sheet" id="confirmSheet" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
     <div class="sheet-head">
       <h2 id="confirmTitle">確認</h2>
@@ -1587,6 +1662,7 @@
     const seed = {
       activeMonth: "2026-05",
       sortOrder: { accounts: [], paymentSources: [], series: [] },
+      paymentMethods: [],
       trash: [],
       months: [
         {
@@ -1609,6 +1685,7 @@
     };
 
     const storageKey = "notion-payment-notes-v1";
+    const currentSchemaVersion = 12;
     const config = window.APP_CONFIG || {};
     const syncTable = config.supabaseStateTable || "user_states";
     let activeStorageKey = storageKey;
@@ -1647,6 +1724,7 @@
     const sheet = document.getElementById("entrySheet");
     const monthSheet = document.getElementById("monthSheet");
     const settingsSheet = document.getElementById("settingsSheet");
+    const paymentMethodsSheet = document.getElementById("paymentMethodsSheet");
     const trashSheet = document.getElementById("trashSheet");
     const daySheet = document.getElementById("daySheet");
     const confirmSheet = document.getElementById("confirmSheet");
@@ -1655,6 +1733,8 @@
     const confirmTitle = document.getElementById("confirmTitle");
     const confirmMessage = document.getElementById("confirmMessage");
     const confirmActions = document.getElementById("confirmActions");
+    const paymentMethodList = document.getElementById("paymentMethodList");
+    const paymentMethodsError = document.getElementById("paymentMethodsError");
     const daySheetTitle = document.getElementById("daySheetTitle");
     const dayDetailList = document.getElementById("dayDetailList");
     const scrim = document.getElementById("scrim");
@@ -1680,6 +1760,7 @@
     const paymentMethodField = document.getElementById("paymentMethodField");
     const paymentMethodInput = document.getElementById("paymentMethodInput");
     const contentInput = document.getElementById("contentInput");
+    const paymentStartInput = document.getElementById("paymentStartInput");
     const billingCycleInput = document.getElementById("billingCycleInput");
     const customBillingCycleField = document.getElementById("customBillingCycleField");
     const customBillingCycleInput = document.getElementById("customBillingCycleInput");
@@ -1694,9 +1775,15 @@
     listViewButton.addEventListener("click", () => setActiveView("list"));
     calendarViewButton.addEventListener("click", () => setActiveView("calendar"));
     document.getElementById("settingsButton").addEventListener("click", openSettingsSheet);
+    document.getElementById("paymentMethodsButton").addEventListener("click", openPaymentMethodsSheet);
+    document.getElementById("addPaymentMethodFromListButton").addEventListener("click", () => {
+      closePaymentMethodsSheet();
+      openSheet();
+    });
     document.getElementById("closeSheetButton").addEventListener("click", closeSheet);
     document.getElementById("closeMonthSheetButton").addEventListener("click", closeMonthSheet);
     document.getElementById("closeSettingsSheetButton").addEventListener("click", closeSettingsSheet);
+    document.getElementById("closePaymentMethodsSheetButton").addEventListener("click", closePaymentMethodsSheet);
     document.getElementById("closeTrashSheetButton").addEventListener("click", closeTrashSheet);
     document.getElementById("closeDaySheetButton").addEventListener("click", closeDaySheet);
     document.getElementById("closeConfirmSheetButton").addEventListener("click", closeConfirmSheet);
@@ -1759,8 +1846,10 @@
     }
 
     function persist(options = {}) {
+      state.paymentMethods = normalizePaymentMethods(state.paymentMethods, state.months);
+      syncAllPaymentMethodNames(state.paymentMethods, state.months);
       state.trash = normalizeTrash(state.trash);
-      state.sortOrder = normalizeSortOrder(state.sortOrder, state.months, state.trash);
+      state.sortOrder = normalizeSortOrder(state.sortOrder, state.months, state.trash, state.paymentMethods);
       if (!options.keepUpdatedAt) {
         state.updatedAt = new Date().toISOString();
       }
@@ -1780,13 +1869,18 @@
       if (sourceSchemaVersion < 11) {
         migrateRecruitCardPayments(normalized.months);
       }
+      normalized.paymentMethods = normalizePaymentMethods(normalized.paymentMethods, normalized.months);
+      syncAllPaymentMethodNames(normalized.paymentMethods, normalized.months);
+      if (sourceSchemaVersion < currentSchemaVersion) {
+        backfillPaymentMethodsForExistingMonths(normalized.paymentMethods, normalized.months);
+      }
       normalized.trash = normalizeTrash(normalized.trash);
-      normalized.sortOrder = normalizeSortOrder(normalized.sortOrder, normalized.months, normalized.trash);
+      normalized.sortOrder = normalizeSortOrder(normalized.sortOrder, normalized.months, normalized.trash, normalized.paymentMethods);
       normalized.activeMonth = normalized.months.some(month => month.id === normalized.activeMonth)
         ? normalized.activeMonth
         : normalized.months[0]?.id || seed.activeMonth;
       normalized.updatedAt = normalized.updatedAt || new Date().toISOString();
-      normalized.schemaVersion = 11;
+      normalized.schemaVersion = currentSchemaVersion;
       return normalized;
     }
 
@@ -1803,6 +1897,171 @@
         });
         month.items = dedupeMonthItems(month.items);
       });
+    }
+
+    function normalizePaymentMethods(value, months) {
+      const methods = new Map();
+      (Array.isArray(value) ? value : []).forEach(entry => {
+        const normalized = normalizePaymentMethod(entry);
+        if (normalized) methods.set(normalized.id, normalized);
+      });
+      const existingIds = new Set(methods.keys());
+      months.slice().sort((a, b) => a.id.localeCompare(b.id)).forEach(month => {
+        month.items.forEach(item => {
+          const id = String(item.seriesId || item.id);
+          const current = methods.get(id);
+          const itemName = String(item.content || "").trim();
+          const defaults = paymentMethodDefaultsFromItem(item, month.id);
+          if (!current) {
+            methods.set(id, {
+              id,
+              name: itemName || "内容未設定",
+              startDate: "",
+              defaults
+            });
+            return;
+          }
+          if (!existingIds.has(id)) {
+            if (itemName) current.name = itemName;
+            current.defaults = defaults;
+          }
+        });
+      });
+      return Array.from(methods.values());
+    }
+
+    function normalizePaymentMethod(value) {
+      if (!value || typeof value !== "object") return null;
+      const id = String(value.id || "").trim();
+      if (!id) return null;
+      return {
+        id,
+        name: String(value.name || "内容未設定").trim() || "内容未設定",
+        startDate: normalizePaymentStartDate(value.startDate),
+        defaults: normalizePaymentMethodDefaults(value.defaults)
+      };
+    }
+
+    function normalizePaymentMethodDefaults(value = {}) {
+      const source = value && typeof value === "object" ? value : {};
+      const paymentType = normalizePaymentType(source.paymentType);
+      return {
+        debitAccount: String(source.debitAccount || unassignedAccount).trim() || unassignedAccount,
+        paymentType,
+        paymentMethod: paymentType === "card" ? String(source.paymentMethod || "").trim() : "",
+        debitDay: normalizeDebitDay(source.debitDay),
+        billingCycleMonths: normalizeBillingCycleMonths(source.billingCycleMonths),
+        billingStartMonth: normalizeBillingStartMonth(source.billingStartMonth, seed.activeMonth)
+      };
+    }
+
+    function paymentMethodDefaultsFromItem(item, monthId) {
+      return normalizePaymentMethodDefaults({
+        debitAccount: item.debitAccount,
+        paymentType: item.paymentType,
+        paymentMethod: item.paymentMethod,
+        debitDay: dayFromDate(item.debitDate) || item.debitDay,
+        billingCycleMonths: item.billingCycleMonths,
+        billingStartMonth: normalizeBillingStartMonth(item.billingStartMonth, monthId)
+      });
+    }
+
+    function normalizePaymentStartDate(value) {
+      const candidate = String(value || "").trim();
+      if (!candidate) return "";
+      const monthMatch = /^(\d{4})-(\d{2})$/.exec(candidate);
+      if (monthMatch) {
+        const month = Number(monthMatch[2]);
+        return month >= 1 && month <= 12 ? candidate : "";
+      }
+      return normalizeDateValue(candidate);
+    }
+
+    function isValidPaymentStartDate(value) {
+      const candidate = String(value || "").trim();
+      return !candidate || normalizePaymentStartDate(candidate) === candidate;
+    }
+
+    function paymentMethodById(id, methods = state.paymentMethods) {
+      return methods.find(method => method.id === String(id || "")) || null;
+    }
+
+    function paymentMethodForItem(item, methods = state.paymentMethods) {
+      return paymentMethodById(item?.seriesId || item?.id, methods);
+    }
+
+    function paymentMethodName(item, methods = state.paymentMethods) {
+      return paymentMethodForItem(item, methods)?.name || String(item?.content || "").trim() || "内容未設定";
+    }
+
+    function isPaymentMethodVisibleInMonth(item, monthId, methods = state.paymentMethods) {
+      const startDate = paymentMethodForItem(item, methods)?.startDate || "";
+      return !startDate || String(monthId) >= startDate.slice(0, 7);
+    }
+
+    function visibleItemsForMonth(month) {
+      return month.items.filter(item => isPaymentMethodVisibleInMonth(item, month.id));
+    }
+
+    function syncAllPaymentMethodNames(methods, months) {
+      months.forEach(month => month.items.forEach(item => {
+        const method = paymentMethodForItem(item, methods);
+        if (method) item.content = method.name;
+      }));
+    }
+
+    function createItemFromPaymentMethod(method, targetMonthId, template = null, sourceMonthId = "") {
+      if (template) {
+        const copied = copyItemForMonth(template, targetMonthId, sourceMonthId);
+        copied.seriesId = method.id;
+        copied.content = method.name;
+        return copied;
+      }
+      const defaults = normalizePaymentMethodDefaults(method.defaults);
+      return normalizeItem({
+        id: crypto.randomUUID(),
+        seriesId: method.id,
+        debitAccount: defaults.debitAccount,
+        paymentType: defaults.paymentType,
+        paymentMethod: defaults.paymentMethod,
+        content: method.name,
+        amount: "",
+        debitDay: defaults.debitDay,
+        debitDate: dateFromMonthAndDay(targetMonthId, defaults.debitDay),
+        billingCycleMonths: defaults.billingCycleMonths,
+        billingStartMonth: defaults.billingStartMonth,
+        note: "",
+        paid: false
+      }, targetMonthId);
+    }
+
+    function closestPaymentItem(methodId, targetMonthId, months) {
+      const candidates = [];
+      months.forEach(month => month.items.forEach(item => {
+        if (String(item.seriesId || item.id) === String(methodId)) {
+          candidates.push({ monthId: month.id, item });
+        }
+      }));
+      candidates.sort((a, b) => {
+        const aBefore = a.monthId <= targetMonthId;
+        const bBefore = b.monthId <= targetMonthId;
+        if (aBefore !== bBefore) return aBefore ? -1 : 1;
+        if (aBefore) return b.monthId.localeCompare(a.monthId);
+        return a.monthId.localeCompare(b.monthId);
+      });
+      return candidates[0] || null;
+    }
+
+    function backfillPaymentMethodsForExistingMonths(methods, months) {
+      methods.forEach(method => {
+        months.forEach(month => {
+          const exists = month.items.some(item => String(item.seriesId || item.id) === method.id);
+          if (exists) return;
+          const source = closestPaymentItem(method.id, month.id, months);
+          month.items.push(createItemFromPaymentMethod(method, month.id, source?.item, source?.monthId));
+        });
+      });
+      syncAllPaymentMethodNames(methods, months);
     }
 
     function normalizeTrash(value) {
@@ -1834,6 +2093,8 @@
           ...base,
           kind: "series",
           label: String(entry.label || entries[0].item.content || "支払い方法"),
+          scope: String(entry.scope || "all"),
+          paymentMethod: normalizePaymentMethod(entry.paymentMethod),
           entries
         };
       }
@@ -1892,7 +2153,7 @@
       return target;
     }
 
-    function normalizeSortOrder(value, months, trash = []) {
+    function normalizeSortOrder(value, months, trash = [], paymentMethods = []) {
       const knownAccounts = [];
       const knownPaymentSources = [];
       const knownSeries = [];
@@ -1908,6 +2169,7 @@
         pushUnique(knownPaymentSources, paymentSourceOrderKey(account, item));
         pushUnique(knownSeries, item.seriesId || item.id);
       });
+      paymentMethods.forEach(method => pushUnique(knownSeries, method.id));
       return {
         accounts: normalizeOrderList(value?.accounts, knownAccounts),
         paymentSources: normalizeOrderList(value?.paymentSources, knownPaymentSources),
@@ -2315,57 +2577,19 @@
     }
 
     function itemsForNewMonth(targetMonthId) {
-      const latestBySeries = new Map();
-      state.months
-        .filter(month => monthIndex(month.id) < monthIndex(targetMonthId))
-        .sort((a, b) => a.id.localeCompare(b.id))
-        .forEach(month => {
-          month.items.forEach(item => {
-            const normalized = normalizeItem(item, month.id);
-            latestBySeries.set(normalized.seriesId, { item: normalized, sourceMonthId: month.id });
-          });
-        });
-
-      const signatures = new Set();
-      return Array.from(latestBySeries.values())
-        .filter(entry => isBillingDueInMonth(entry.item, targetMonthId))
-        .filter(entry => {
-          const signature = automaticCopySignature(entry.item);
-          if (signatures.has(signature)) return false;
-          signatures.add(signature);
-          return true;
-        })
-        .map(entry => copyItemForMonth(entry.item, targetMonthId, entry.sourceMonthId));
+      return state.paymentMethods.map(method => {
+        const source = closestPaymentItem(method.id, targetMonthId, state.months);
+        return createItemFromPaymentMethod(method, targetMonthId, source?.item, source?.monthId);
+      });
     }
 
     function itemsForPreviousMonth(targetMonthId, sourceMonth) {
-      const signatures = new Set();
-      const latestBySeries = new Map();
-      state.months.slice().sort((a, b) => a.id.localeCompare(b.id)).forEach(month => {
-        month.items.forEach(item => {
-          const normalized = normalizeItem(item, month.id);
-          latestBySeries.set(normalized.seriesId, normalized);
-        });
+      return itemsForNewMonth(targetMonthId).map(item => {
+        item.usagePeriodStart = "";
+        item.usagePeriodEnd = "";
+        item.paidDate = "";
+        return item;
       });
-      return Array.from(latestBySeries.values())
-        .filter(item => {
-          const cycle = normalizeBillingCycleMonths(item.billingCycleMonths);
-          const startMonth = normalizeBillingStartMonth(item.billingStartMonth, sourceMonth.id);
-          return (monthIndex(targetMonthId) - monthIndex(startMonth)) % cycle === 0;
-        })
-        .filter(item => {
-          const signature = automaticCopySignature(item);
-          if (signatures.has(signature)) return false;
-          signatures.add(signature);
-          return true;
-        })
-        .map(item => {
-          const copied = copyItemForMonth(item, targetMonthId);
-          copied.usagePeriodStart = "";
-          copied.usagePeriodEnd = "";
-          copied.paidDate = "";
-          return copied;
-        });
     }
 
     function automaticCopySignature(item) {
@@ -2425,7 +2649,7 @@
 
     function render() {
       state.trash = normalizeTrash(state.trash);
-      state.sortOrder = normalizeSortOrder(state.sortOrder, state.months, state.trash);
+      state.sortOrder = normalizeSortOrder(state.sortOrder, state.months, state.trash, state.paymentMethods);
       renderTabs();
       renderAccountSuggestions();
       renderMonthlyTable();
@@ -2435,6 +2659,7 @@
       trashButton.textContent = state.trash.length ? `最近削除 (${state.trash.length})` : "最近削除";
       renderSettingsActions();
       renderSummary();
+      if (paymentMethodsSheet.classList.contains("open")) renderPaymentMethodList();
     }
 
     function renderSettingsActions() {
@@ -2473,7 +2698,7 @@
         if (!eventsByDate.has(date)) eventsByDate.set(date, []);
         eventsByDate.get(date).push({ sourceMonth, item });
       };
-      state.months.forEach(sourceMonth => sourceMonth.items.forEach(item => {
+      state.months.forEach(sourceMonth => visibleItemsForMonth(sourceMonth).forEach(item => {
         addEvent(normalizeDateValue(item.debitDate), sourceMonth, item);
       }));
       return eventsByDate;
@@ -2690,6 +2915,7 @@
 
     function renderMonthlyTable() {
       const month = currentMonth();
+      const visibleItems = visibleItemsForMonth(month);
       const isExpanded = expandedMonthlyTables.has(month.id);
       monthlyTableToggle.setAttribute("aria-expanded", String(isExpanded));
       monthlyTableWrap.hidden = !isExpanded;
@@ -2698,12 +2924,12 @@
         return;
       }
 
-      const total = month.items.reduce((sum, item) => sum + toNumber(item.amount), 0);
-      const sortedItems = orderedItems(month.items);
+      const total = visibleItems.reduce((sum, item) => sum + toNumber(item.amount), 0);
+      const sortedItems = orderedItems(visibleItems);
       const rows = sortedItems.length
         ? sortedItems.map(item => `
             <tr>
-              <td>${escapeHtml(item.content || "内容未設定")}</td>
+              <td>${escapeHtml(paymentMethodName(item))}</td>
               <td>${formatAmount(item.amount)}</td>
             </tr>
           `).join("")
@@ -2770,7 +2996,7 @@
     function renderEntries() {
       const month = currentMonth();
       const query = searchInput.value.trim().toLowerCase();
-      const items = orderedItems(month.items).filter(item => matchesQuery(item, query, month.id));
+      const items = orderedItems(visibleItemsForMonth(month)).filter(item => matchesQuery(item, query, month.id));
       const accountGroups = groupItemsByDebitAccount(items);
 
       list.innerHTML = "";
@@ -2874,6 +3100,7 @@
 
     function renderEntryCard(item, monthId) {
       const article = document.createElement("article");
+      const displayName = paymentMethodName(item);
       const billingCycleMonths = normalizeBillingCycleMonths(item.billingCycleMonths);
       const debitDate = item.debitDate || dateFromMonthAndDay(monthId, item.debitDay);
       const debitDayLabel = formatDebitDayLabel(debitDate);
@@ -2887,17 +3114,17 @@
       article.dataset.paymentSourceKey = paymentSourceOrderKey(item.debitAccount || unassignedAccount, item);
       article.innerHTML = `
           <div class="entry-main">
-            <button class="drag-handle entry-drag-handle" type="button" aria-label="${escapeAttr(item.content || "明細")}を並び替え">≡</button>
+            <button class="drag-handle entry-drag-handle" type="button" aria-label="${escapeAttr(displayName)}を並び替え">≡</button>
             <button class="check" type="button" title="支払い済み" aria-label="支払い済み">${item.paid ? "✓" : ""}</button>
             <div class="entry-title">
-              <strong>${escapeHtml(item.content || "内容未設定")}</strong>
+              <strong>${escapeHtml(displayName)}</strong>
               <div class="entry-meta">
                 ${billingCycleMonths > 1 ? `<span class="billing-cycle">${billingCycleLabel(billingCycleMonths)}</span>` : ""}
               </div>
             </div>
             <div class="entry-actions">
               <button class="entry-edit" type="button">編集</button>
-              <input class="amount-input" inputmode="numeric" value="${escapeAttr(formatAmountInput(item.amount))}" data-field="amount" aria-label="${escapeAttr(item.content || "明細")}の金額">
+              <input class="amount-input" inputmode="numeric" value="${escapeAttr(formatAmountInput(item.amount))}" data-field="amount" aria-label="${escapeAttr(displayName)}の金額">
             </div>
           </div>
           <div class="entry-fields">
@@ -3156,10 +3383,11 @@
 
     function renderSummary() {
       const month = currentMonth();
-      const sum = month.items.reduce((acc, item) => acc + toNumber(item.amount), 0);
-      const paid = month.items.filter(item => item.paid).length;
+      const visibleItems = visibleItemsForMonth(month);
+      const sum = visibleItems.reduce((acc, item) => acc + toNumber(item.amount), 0);
+      const paid = visibleItems.filter(item => item.paid).length;
       totalAmount.textContent = formatAmount(sum);
-      paidCount.textContent = `${paid} / ${month.items.length}`;
+      paidCount.textContent = `${paid} / ${visibleItems.length}`;
     }
 
     function openMonthSheet() {
@@ -3201,6 +3429,10 @@
       }
       if (trashSheet.classList.contains("open")) {
         closeTrashSheet();
+        return;
+      }
+      if (paymentMethodsSheet.classList.contains("open")) {
+        closePaymentMethodsSheet();
         return;
       }
       if (monthSheet.classList.contains("open")) {
@@ -3264,9 +3496,15 @@
         };
       }
       if (entry.kind === "series") {
+        const scopeLabels = {
+          current: "この月から削除",
+          after: "これ以降から削除",
+          before: "これ以前から削除",
+          all: "すべての年月から削除"
+        };
         return {
           title: entry.label || "支払い方法",
-          description: `全年月から削除・${entry.entries.length}か月分`
+          description: `${scopeLabels[entry.scope] || scopeLabels.all}・${entry.entries.length}か月分`
         };
       }
       return {
@@ -3282,7 +3520,19 @@
       if (entry.kind === "month") {
         restoreDeletedMonth(entry);
       } else if (entry.kind === "series") {
+        if (entry.paymentMethod && !paymentMethodById(entry.paymentMethod.id)) {
+          state.paymentMethods.push(normalizePaymentMethod(entry.paymentMethod));
+        }
         entry.entries.forEach(value => restoreItemToMonth(value.monthId, value.monthLabel, value.item, true));
+        if (entry.scope === "all" && entry.paymentMethod) {
+          const method = paymentMethodById(entry.paymentMethod.id);
+          state.months.forEach(month => {
+            const exists = month.items.some(item => String(item.seriesId || item.id) === method.id);
+            if (exists) return;
+            const source = closestPaymentItem(method.id, month.id, state.months);
+            month.items.push(createItemFromPaymentMethod(method, month.id, source?.item, source?.monthId));
+          });
+        }
       } else {
         restored = restoreItemToMonth(entry.monthId, entry.monthLabel, entry.item, false);
       }
@@ -3317,10 +3567,16 @@
         return false;
       }
       const restored = normalizeItem(item, month.id);
-      const signature = automaticCopySignature(restored);
+      if (!paymentMethodForItem(restored)) {
+        state.paymentMethods.push({
+          id: restored.seriesId,
+          name: restored.content || "内容未設定",
+          startDate: "",
+          defaults: paymentMethodDefaultsFromItem(restored, month.id)
+        });
+      }
       const existing = month.items.find(value =>
-        String(value.seriesId) === String(restored.seriesId) ||
-        automaticCopySignature(value) === signature
+        String(value.seriesId) === String(restored.seriesId)
       );
       if (existing) {
         mergeDuplicateItem(existing, restored);
@@ -3431,6 +3687,7 @@
 
     function openSheet(id) {
       const item = id ? currentMonth().items.find(entry => entry.id === id) : null;
+      const method = item ? paymentMethodForItem(item) : null;
       const itemBillingCycle = normalizeBillingCycleMonths(item?.billingCycleMonths);
       editingId = id || null;
       sheetTitle.textContent = item ? "明細の詳細" : "明細を追加";
@@ -3440,7 +3697,8 @@
       customDebitAccountInput.value = "";
       paymentTypeInput.value = normalizePaymentType(item?.paymentType);
       paymentMethodInput.value = item?.paymentMethod || "";
-      contentInput.value = item?.content || "";
+      contentInput.value = method?.name || item?.content || "";
+      paymentStartInput.value = method?.startDate || "";
       if ([1, 2, 3, 6, 12].includes(itemBillingCycle)) {
         billingCycleInput.value = String(itemBillingCycle);
         customBillingCycleInput.value = "";
@@ -3463,6 +3721,77 @@
       scrim.classList.add("open");
       settingsSheet.setAttribute("aria-hidden", "false");
       settingsSheet.scrollTop = 0;
+    }
+
+    function openPaymentMethodsSheet() {
+      closeSettingsSheet();
+      paymentMethodsError.textContent = "";
+      paymentMethodsError.classList.remove("show");
+      renderPaymentMethodList();
+      paymentMethodsSheet.classList.add("open");
+      scrim.classList.add("open");
+      paymentMethodsSheet.setAttribute("aria-hidden", "false");
+      paymentMethodsSheet.scrollTop = 0;
+    }
+
+    function closePaymentMethodsSheet() {
+      paymentMethodsSheet.classList.remove("open");
+      paymentMethodsSheet.setAttribute("aria-hidden", "true");
+      if (!document.querySelector(".sheet.open")) scrim.classList.remove("open");
+    }
+
+    function renderPaymentMethodList() {
+      paymentMethodList.replaceChildren();
+      if (!state.paymentMethods.length) {
+        paymentMethodList.innerHTML = '<div class="empty">支払い方法がありません</div>';
+        return;
+      }
+      const table = document.createElement("table");
+      table.className = "payment-method-table";
+      table.innerHTML = "<thead><tr><th>支払い方法</th><th>作成日・加入日</th></tr></thead><tbody></tbody>";
+      const body = table.querySelector("tbody");
+      state.paymentMethods.slice().sort((a, b) => {
+        const rank = orderRank(state.sortOrder.series, a.id) - orderRank(state.sortOrder.series, b.id);
+        return rank || a.name.localeCompare(b.name, "ja");
+      }).forEach(method => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td><input value="${escapeAttr(method.name)}" data-master-field="name" aria-label="支払い方法名"></td>
+          <td><input value="${escapeAttr(method.startDate)}" data-master-field="startDate" inputmode="numeric" placeholder="YYYY-MM または YYYY-MM-DD" aria-label="${escapeAttr(method.name)}の作成日・加入日"></td>`;
+        row.querySelectorAll("[data-master-field]").forEach(control => {
+          control.addEventListener("change", () => commitPaymentMethodListEdit(method, control));
+        });
+        body.appendChild(row);
+      });
+      paymentMethodList.appendChild(table);
+    }
+
+    function commitPaymentMethodListEdit(method, control) {
+      const field = control.dataset.masterField;
+      const value = control.value.trim();
+      paymentMethodsError.textContent = "";
+      paymentMethodsError.classList.remove("show");
+      control.setAttribute("aria-invalid", "false");
+      if (field === "name" && !value) {
+        control.setAttribute("aria-invalid", "true");
+        paymentMethodsError.textContent = "支払い方法名を入力してください。";
+        paymentMethodsError.classList.add("show");
+        return;
+      }
+      if (field === "startDate" && !isValidPaymentStartDate(value)) {
+        control.setAttribute("aria-invalid", "true");
+        paymentMethodsError.textContent = "作成日・加入日は「YYYY-MM」または「YYYY-MM-DD」の形式で入力してください。";
+        paymentMethodsError.classList.add("show");
+        return;
+      }
+      if (field === "name") {
+        method.name = value;
+        syncAllPaymentMethodNames(state.paymentMethods, state.months);
+      } else {
+        method.startDate = normalizePaymentStartDate(value);
+      }
+      persist();
+      render();
     }
 
     function closeSettingsSheet() {
@@ -3525,6 +3854,7 @@
         : debitAccountInput.value.trim();
       const paymentMethod = paymentType === "card" ? paymentMethodInput.value.trim() : "";
       const content = contentInput.value.trim();
+      const paymentStartDate = paymentStartInput.value.trim();
       const selectedCycleValue = billingCycleInput.value === "custom"
         ? customBillingCycleInput.value
         : billingCycleInput.value;
@@ -3537,6 +3867,11 @@
 
       if (!content) {
         showEntryError("内容を入力してください。");
+        return;
+      }
+
+      if (!isValidPaymentStartDate(paymentStartDate)) {
+        showEntryError("作成日・加入日は「YYYY-MM」または「YYYY-MM-DD」の形式で入力してください。");
         return;
       }
 
@@ -3576,9 +3911,32 @@
       if (editingId) {
         const item = existingItem;
         Object.assign(item, { seriesId: item.seriesId || item.id }, payload);
+        let method = paymentMethodForItem(item);
+        if (!method) {
+          method = { id: item.seriesId, name: content, startDate: paymentStartDate, defaults: {} };
+          state.paymentMethods.push(method);
+        }
+        method.name = content;
+        method.startDate = normalizePaymentStartDate(paymentStartDate);
+        method.defaults = paymentMethodDefaultsFromItem(item, month.id);
+        syncAllPaymentMethodNames(state.paymentMethods, state.months);
       } else {
         const id = crypto.randomUUID();
-        month.items.push({ id, seriesId: id, paid: false, ...payload });
+        const currentItem = normalizeItem({ id, seriesId: id, paid: false, ...payload }, month.id);
+        const method = {
+          id,
+          name: content,
+          startDate: normalizePaymentStartDate(paymentStartDate),
+          defaults: paymentMethodDefaultsFromItem(currentItem, month.id)
+        };
+        state.paymentMethods.push(method);
+        state.months.forEach(targetMonth => {
+          if (targetMonth.id === month.id) {
+            targetMonth.items.push(currentItem);
+          } else {
+            targetMonth.items.push(createItemFromPaymentMethod(method, targetMonth.id, currentItem, month.id));
+          }
+        });
       }
       persist();
       closeSheet();
@@ -3619,52 +3977,49 @@
       const month = currentMonth();
       const item = month.items.find(entry => entry.id === editingId);
       if (!item) return;
-      const label = item.content || item.paymentMethod || "支払い方法";
+      const label = paymentMethodName(item);
       openConfirmation({
         title: `${label}を削除`,
         message: "削除する範囲を選んでください。削除後30日間は「最近削除」から復元できます。",
         actions: [
           {
-            label: "この月だけ削除",
+            label: "この月",
             className: "danger",
-            handler: () => deleteEntryFromCurrentMonth(item.id)
+            handler: () => deleteEntryByRange(item, "current")
           },
           {
-            label: "全年月から削除",
+            label: "これ以降",
             className: "danger",
-            handler: () => deleteEntryFromAllMonths(item)
+            handler: () => deleteEntryByRange(item, "after")
+          },
+          {
+            label: "これ以前",
+            className: "danger",
+            handler: () => deleteEntryByRange(item, "before")
+          },
+          {
+            label: "すべて",
+            className: "danger",
+            handler: () => deleteEntryByRange(item, "all")
           }
         ]
       });
     }
 
-    function deleteEntryFromCurrentMonth(itemId) {
-      const month = currentMonth();
-      const item = month.items.find(entry => entry.id === itemId);
-      if (!item) return;
-      state.trash.push({
-        id: crypto.randomUUID(),
-        kind: "item",
-        deletedAt: new Date().toISOString(),
-        monthId: month.id,
-        monthLabel: month.label,
-        item: structuredClone(item)
-      });
-      month.items = month.items.filter(entry => entry.id !== itemId);
-      persist();
-      closeSheet();
-      render();
-    }
-
-    function deleteEntryFromAllMonths(targetItem) {
+    function deleteEntryByRange(targetItem, scope) {
       const seriesId = String(targetItem.seriesId || targetItem.id);
-      const signature = automaticCopySignature(targetItem);
+      const activeMonthId = currentMonth().id;
+      const method = paymentMethodForItem(targetItem);
       const deletedEntries = [];
       state.months.forEach(month => {
+        const inRange = scope === "all" ||
+          (scope === "current" && month.id === activeMonthId) ||
+          (scope === "after" && month.id >= activeMonthId) ||
+          (scope === "before" && month.id <= activeMonthId);
+        if (!inRange) return;
         const keptItems = [];
         month.items.forEach(item => {
-          const matches = String(item.seriesId || item.id) === seriesId ||
-            automaticCopySignature(item) === signature;
+          const matches = String(item.seriesId || item.id) === seriesId;
           if (matches) {
             deletedEntries.push({
               monthId: month.id,
@@ -3678,11 +4033,16 @@
         month.items = keptItems;
       });
       if (!deletedEntries.length) return;
+      if (scope === "all") {
+        state.paymentMethods = state.paymentMethods.filter(entry => entry.id !== seriesId);
+      }
       state.trash.push({
         id: crypto.randomUUID(),
         kind: "series",
         deletedAt: new Date().toISOString(),
-        label: targetItem.content || targetItem.paymentMethod || "支払い方法",
+        label: method?.name || targetItem.content || "支払い方法",
+        scope,
+        paymentMethod: method ? structuredClone(method) : null,
         entries: deletedEntries
       });
       persist();
@@ -3994,7 +4354,7 @@
           (activeStateSource === "seed" || remoteUpdatedAt > localUpdatedAt);
 
         if (shouldUseRemote) {
-          const remoteNeedsMigration = Number(data.state?.schemaVersion || 0) < 11;
+          const remoteNeedsMigration = Number(data.state?.schemaVersion || 0) < currentSchemaVersion;
           activeStateSource = "remote";
           replaceState(data.state, data.updated_at);
           render();
