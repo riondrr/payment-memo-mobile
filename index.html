@@ -445,6 +445,83 @@
       display: none;
     }
 
+    .payment-group {
+      display: grid;
+      gap: 8px;
+      margin-left: 14px;
+      padding-left: 12px;
+      border-left: 2px solid rgba(30, 134, 199, .18);
+    }
+
+    .payment-group-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 42px;
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .payment-group-toggle {
+      display: flex;
+      flex: 1 1 auto;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+    }
+
+    .payment-group-chevron {
+      flex: 0 0 auto;
+      color: var(--accent);
+      font-size: 17px;
+      transition: transform .18s ease;
+    }
+
+    .payment-group-toggle[aria-expanded="false"] .payment-group-chevron {
+      transform: rotate(-90deg);
+    }
+
+    .payment-group-title {
+      min-width: 0;
+    }
+
+    .payment-group-title strong {
+      display: block;
+      font-size: 15px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .payment-group-title span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .payment-group-total {
+      flex: 0 0 auto;
+      color: var(--accent);
+      font-size: 15px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .payment-group-items {
+      display: grid;
+      gap: 8px;
+    }
+
+    .payment-group-items[hidden] {
+      display: none;
+    }
+
     .entry {
       border: 1px solid var(--line);
       background: rgba(255, 253, 249, .92);
@@ -1263,6 +1340,15 @@
     }
 
     @media (max-width: 360px) {
+      .payment-group {
+        margin-left: 6px;
+        padding-left: 7px;
+      }
+
+      .payment-group-head {
+        padding-inline: 6px;
+      }
+
       .summary {
         grid-template-columns: 1fr;
       }
@@ -1500,7 +1586,7 @@
 
     const seed = {
       activeMonth: "2026-05",
-      sortOrder: { accounts: [], series: [] },
+      sortOrder: { accounts: [], paymentSources: [], series: [] },
       trash: [],
       months: [
         {
@@ -1508,8 +1594,10 @@
           label: "2026年5月",
           items: [
             { id: "sbi-rent", seriesId: "sbi-rent", debitAccount: "住信SBIネット銀行", paymentType: "direct", paymentMethod: "", content: "家賃", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
-            { id: "recruit-gas", seriesId: "recruit-gas", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "リクルートカード", content: "ガス代", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
-            { id: "recruit-water", seriesId: "recruit-water", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "リクルートカード", content: "水道", amount: "", debitDay: null, billingCycleMonths: 2, billingStartMonth: "2026-05", note: "", paid: false },
+            { id: "recruit-gas", seriesId: "recruit-gas", debitAccount: "住信SBIネット銀行", paymentType: "card", paymentMethod: "リクルートカード", content: "ガス代", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
+            { id: "recruit-electricity", seriesId: "recruit-electricity", debitAccount: "住信SBIネット銀行", paymentType: "card", paymentMethod: "リクルートカード", content: "電気", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
+            { id: "recruit-water", seriesId: "recruit-water", debitAccount: "住信SBIネット銀行", paymentType: "card", paymentMethod: "リクルートカード", content: "水道", amount: "", debitDay: null, billingCycleMonths: 2, billingStartMonth: "2026-05", note: "", paid: false },
+            { id: "recruit-mineo", seriesId: "recruit-mineo", debitAccount: "住信SBIネット銀行", paymentType: "card", paymentMethod: "リクルートカード", content: "mineo", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
             { id: "paypay-bank", seriesId: "paypay-bank", debitAccount: "PayPay銀行", paymentType: "direct", paymentMethod: "", content: "", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
             { id: "paypay-card", seriesId: "paypay-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "PayPayカード", content: "普段使い", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
             { id: "orico-card", seriesId: "orico-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "オリコカード", content: "予備", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
@@ -1531,6 +1619,7 @@
     let dragState = null;
     let activeView = "list";
     const collapsedAccountGroups = new Set();
+    const expandedPaymentGroups = new Set();
     const expandedMonthlyTables = new Set();
     let supabaseClient = null;
     let currentSession = null;
@@ -1655,7 +1744,14 @@
         const raw = localStorage.getItem(key);
         if (!raw) return null;
         const saved = JSON.parse(raw);
-        if (saved && Array.isArray(saved.months)) return normalizeState(saved);
+        if (saved && Array.isArray(saved.months)) {
+          const savedSchemaVersion = Number(saved.schemaVersion || 0);
+          const normalized = normalizeState(saved);
+          if (savedSchemaVersion < normalized.schemaVersion) {
+            localStorage.setItem(key, JSON.stringify(normalized));
+          }
+          return normalized;
+        }
       } catch (error) {
         console.warn(error);
       }
@@ -1677,17 +1773,36 @@
 
     function normalizeState(value) {
       const normalized = value && typeof value === "object" ? value : structuredClone(seed);
+      const sourceSchemaVersion = Number(normalized.schemaVersion || 0);
       normalized.months = Array.isArray(normalized.months) && normalized.months.length
         ? normalized.months.map(normalizeMonth)
         : structuredClone(seed.months).map(normalizeMonth);
+      if (sourceSchemaVersion < 11) {
+        migrateRecruitCardPayments(normalized.months);
+      }
       normalized.trash = normalizeTrash(normalized.trash);
       normalized.sortOrder = normalizeSortOrder(normalized.sortOrder, normalized.months, normalized.trash);
       normalized.activeMonth = normalized.months.some(month => month.id === normalized.activeMonth)
         ? normalized.activeMonth
         : normalized.months[0]?.id || seed.activeMonth;
       normalized.updatedAt = normalized.updatedAt || new Date().toISOString();
-      normalized.schemaVersion = 10;
+      normalized.schemaVersion = 11;
       return normalized;
+    }
+
+    function migrateRecruitCardPayments(months) {
+      const recruitContents = new Set(["ガス代", "電気", "水道", "mineo"]);
+      months.forEach(month => {
+        month.items.forEach(item => {
+          const content = String(item.content || "").trim();
+          const matchesRecruitContent = recruitContents.has(content) || content.toLowerCase() === "mineo";
+          if (!matchesRecruitContent) return;
+          item.debitAccount = "住信SBIネット銀行";
+          item.paymentType = "card";
+          item.paymentMethod = "リクルートカード";
+        });
+        month.items = dedupeMonthItems(month.items);
+      });
     }
 
     function normalizeTrash(value) {
@@ -1779,17 +1894,23 @@
 
     function normalizeSortOrder(value, months, trash = []) {
       const knownAccounts = [];
+      const knownPaymentSources = [];
       const knownSeries = [];
       months.forEach(month => month.items.forEach(item => {
-        pushUnique(knownAccounts, item.debitAccount || unassignedAccount);
+        const account = item.debitAccount || unassignedAccount;
+        pushUnique(knownAccounts, account);
+        pushUnique(knownPaymentSources, paymentSourceOrderKey(account, item));
         pushUnique(knownSeries, item.seriesId || item.id);
       }));
       trashItems(trash).forEach(item => {
-        pushUnique(knownAccounts, item.debitAccount || unassignedAccount);
+        const account = item.debitAccount || unassignedAccount;
+        pushUnique(knownAccounts, account);
+        pushUnique(knownPaymentSources, paymentSourceOrderKey(account, item));
         pushUnique(knownSeries, item.seriesId || item.id);
       });
       return {
         accounts: normalizeOrderList(value?.accounts, knownAccounts),
+        paymentSources: normalizeOrderList(value?.paymentSources, knownPaymentSources),
         series: normalizeOrderList(value?.series, knownSeries)
       };
     }
@@ -2449,12 +2570,12 @@
       renderEntries();
     }
 
-    function bindDragHandle(handle, kind, key, account, container) {
+    function bindDragHandle(handle, kind, key, scope, container) {
       handle.title = "ドラッグして並び替え（キーボードは上下矢印）";
       handle.addEventListener("pointerdown", event => {
         if (!reorderMode || event.button !== 0) return;
         event.preventDefault();
-        dragState = { kind, key: String(key), account, container, target: null };
+        dragState = { kind, key: String(key), scope, container, target: null };
         container.classList.add("dragging");
         handle.setPointerCapture(event.pointerId);
       });
@@ -2468,29 +2589,53 @@
       handle.addEventListener("keydown", event => {
         if (!reorderMode || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
         event.preventDefault();
-        const candidates = kind === "account"
-          ? Array.from(list.querySelectorAll(".account-group"))
-          : Array.from(container.closest(".account-group").querySelectorAll(".entry"));
+        const candidates = dragCandidates(kind, container);
         const currentIndex = candidates.indexOf(container);
         const direction = event.key === "ArrowUp" ? -1 : 1;
         const target = candidates[currentIndex + direction];
         if (!target) return;
-        const targetKey = kind === "account" ? target.dataset.account : target.dataset.seriesId;
-        const order = kind === "account" ? state.sortOrder.accounts : state.sortOrder.series;
+        const targetKey = dragTargetKey(kind, target);
+        const order = dragOrder(kind);
         moveOrderValue(order, String(key), targetKey, direction > 0);
         persist();
         render();
       });
     }
 
+    function dragCandidates(kind, container) {
+      if (kind === "account") {
+        return Array.from(list.querySelectorAll(".account-group"));
+      }
+      if (kind === "paymentSource") {
+        return Array.from(container.closest(".account-group").querySelectorAll(":scope > .account-items > .payment-group"));
+      }
+      return Array.from(container.closest(".payment-group").querySelectorAll(":scope > .payment-group-items > .entry"));
+    }
+
+    function dragTargetKey(kind, target) {
+      if (kind === "account") return target.dataset.account;
+      if (kind === "paymentSource") return target.dataset.paymentSourceKey;
+      return target.dataset.seriesId;
+    }
+
+    function dragOrder(kind) {
+      if (kind === "account") return state.sortOrder.accounts;
+      if (kind === "paymentSource") return state.sortOrder.paymentSources;
+      return state.sortOrder.series;
+    }
+
     function updateDragTarget(clientX, clientY) {
       if (!dragState) return;
-      const selector = dragState.kind === "account" ? ".account-group" : ".entry";
+      const selector = dragState.kind === "account"
+        ? ".account-group"
+        : dragState.kind === "paymentSource"
+          ? ".payment-group"
+          : ".entry";
       const candidate = document.elementFromPoint(clientX, clientY)?.closest(selector);
-      const validCandidate = candidate && candidate !== dragState.container &&
-        (dragState.kind === "account" || candidate.dataset.account === dragState.account)
-        ? candidate
-        : null;
+      const sameScope = dragState.kind === "account" ||
+        (dragState.kind === "paymentSource" && candidate?.dataset.account === dragState.scope) ||
+        (dragState.kind === "series" && candidate?.dataset.paymentSourceKey === dragState.scope);
+      const validCandidate = candidate && candidate !== dragState.container && sameScope ? candidate : null;
       if (dragState.target === validCandidate) return;
       dragState.target?.classList.remove("drop-target");
       dragState.target = validCandidate;
@@ -2501,9 +2646,9 @@
       if (!dragState) return;
       const { kind, key, target, container } = dragState;
       if (target) {
-        const targetKey = kind === "account" ? target.dataset.account : target.dataset.seriesId;
+        const targetKey = dragTargetKey(kind, target);
         const after = clientY > target.getBoundingClientRect().top + target.getBoundingClientRect().height / 2;
-        const order = kind === "account" ? state.sortOrder.accounts : state.sortOrder.series;
+        const order = dragOrder(kind);
         moveOrderValue(order, key, targetKey, after);
         persist();
       }
@@ -2633,7 +2778,7 @@
       reorderButton.classList.toggle("active", reorderMode);
       reorderButton.setAttribute("aria-pressed", String(reorderMode));
       reorderButton.disabled = Boolean(query);
-      reorderButton.title = query ? "検索を解除すると並び替えできます" : "銀行と支払い方法を並び替え";
+      reorderButton.title = query ? "検索を解除すると並び替えできます" : "銀行・支払経路・明細を並び替え";
 
       if (!accountGroups.length) {
         const empty = document.createElement("div");
@@ -2648,7 +2793,7 @@
         section.className = "account-group";
         section.dataset.account = group.account;
         const groupKey = `${month.id}\u0000${group.account}`;
-        const isCollapsed = collapsedAccountGroups.has(groupKey);
+        const isCollapsed = !query && collapsedAccountGroups.has(groupKey);
         const groupSum = group.items.reduce((acc, item) => acc + toNumber(item.amount), 0);
         const groupPaid = group.items.filter(item => item.paid).length;
         section.innerHTML = `
@@ -2667,7 +2812,51 @@
         `;
 
         const accountItems = section.querySelector(".account-items");
-        group.items.forEach(item => accountItems.appendChild(renderEntryCard(item, month.id)));
+        const paymentGroups = groupItemsByPaymentSource(group.items, group.account);
+        paymentGroups.forEach(paymentGroup => {
+          const paymentSection = document.createElement("section");
+          paymentSection.className = "payment-group";
+          paymentSection.dataset.paymentSourceKey = paymentGroup.key;
+          paymentSection.dataset.account = group.account;
+          const paymentGroupKey = `${month.id}\u0000${paymentGroup.key}`;
+          const isPaymentExpanded = Boolean(query) || expandedPaymentGroups.has(paymentGroupKey);
+          const paymentSum = paymentGroup.items.reduce((acc, item) => acc + toNumber(item.amount), 0);
+          const paymentPaid = paymentGroup.items.filter(item => item.paid).length;
+          paymentSection.innerHTML = `
+            <div class="payment-group-head">
+              <button class="drag-handle payment-group-drag-handle" type="button" aria-label="${escapeAttr(paymentGroup.label)}を並び替え">≡</button>
+              <button class="payment-group-toggle" type="button" aria-expanded="${String(isPaymentExpanded)}">
+                <span class="payment-group-chevron" aria-hidden="true">⌄</span>
+                <span class="payment-group-title">
+                  <strong>${escapeHtml(paymentGroup.label)}</strong>
+                  <span>支払い済み ${paymentPaid} / ${paymentGroup.items.length}</span>
+                </span>
+              </button>
+              <div class="payment-group-total">${formatAmount(paymentSum)}</div>
+            </div>
+            <div class="payment-group-items" ${isPaymentExpanded ? "" : "hidden"}></div>
+          `;
+          const paymentItems = paymentSection.querySelector(".payment-group-items");
+          paymentGroup.items.forEach(item => paymentItems.appendChild(renderEntryCard(item, month.id)));
+          bindDragHandle(
+            paymentSection.querySelector(".payment-group-drag-handle"),
+            "paymentSource",
+            paymentGroup.key,
+            group.account,
+            paymentSection
+          );
+          paymentSection.querySelector(".payment-group-toggle").addEventListener("click", event => {
+            const collapsed = !paymentItems.hidden;
+            paymentItems.hidden = collapsed;
+            event.currentTarget.setAttribute("aria-expanded", String(!collapsed));
+            if (collapsed) {
+              expandedPaymentGroups.delete(paymentGroupKey);
+            } else {
+              expandedPaymentGroups.add(paymentGroupKey);
+            }
+          });
+          accountItems.appendChild(paymentSection);
+        });
         bindDragHandle(section.querySelector(".account-drag-handle"), "account", group.account, group.account, section);
         section.querySelector(".account-toggle").addEventListener("click", event => {
           const collapsed = !accountItems.hidden;
@@ -2685,9 +2874,6 @@
 
     function renderEntryCard(item, monthId) {
       const article = document.createElement("article");
-      const paymentType = normalizePaymentType(item.paymentType);
-      const paymentMethod = paymentType === "card" ? item.paymentMethod || "カード未設定" : "";
-      const paymentSourceLabel = paymentType === "card" ? paymentMethod : paymentLabels[paymentType];
       const billingCycleMonths = normalizeBillingCycleMonths(item.billingCycleMonths);
       const debitDate = item.debitDate || dateFromMonthAndDay(monthId, item.debitDay);
       const debitDayLabel = formatDebitDayLabel(debitDate);
@@ -2698,6 +2884,7 @@
       article.className = `entry${item.paid ? " done" : ""}`;
       article.dataset.seriesId = item.seriesId || item.id;
       article.dataset.account = item.debitAccount || unassignedAccount;
+      article.dataset.paymentSourceKey = paymentSourceOrderKey(item.debitAccount || unassignedAccount, item);
       article.innerHTML = `
           <div class="entry-main">
             <button class="drag-handle entry-drag-handle" type="button" aria-label="${escapeAttr(item.content || "明細")}を並び替え">≡</button>
@@ -2705,7 +2892,6 @@
             <div class="entry-title">
               <strong>${escapeHtml(item.content || "内容未設定")}</strong>
               <div class="entry-meta">
-                <span class="payment-source ${paymentType === "card" ? "card" : "direct"}">${escapeHtml(paymentSourceLabel)}</span>
                 ${billingCycleMonths > 1 ? `<span class="billing-cycle">${billingCycleLabel(billingCycleMonths)}</span>` : ""}
               </div>
             </div>
@@ -2756,7 +2942,7 @@
         article.querySelector(".entry-drag-handle"),
         "series",
         item.seriesId || item.id,
-        item.debitAccount || unassignedAccount,
+        paymentSourceOrderKey(item.debitAccount || unassignedAccount, item),
         article
       );
       article.querySelector(".entry-edit").addEventListener("click", () => openSheet(item.id));
@@ -2880,6 +3066,34 @@
       });
       return Array.from(groups.values()).sort((a, b) =>
         orderRank(state.sortOrder.accounts, a.account) - orderRank(state.sortOrder.accounts, b.account)
+      );
+    }
+
+    function paymentSourceOrderKey(account, item) {
+      const paymentType = normalizePaymentType(item?.paymentType);
+      const paymentMethod = paymentType === "card"
+        ? String(item?.paymentMethod || "カード未設定").trim() || "カード未設定"
+        : "";
+      return JSON.stringify([String(account || unassignedAccount), paymentType, paymentMethod]);
+    }
+
+    function paymentSourceLabel(item) {
+      const paymentType = normalizePaymentType(item?.paymentType);
+      if (paymentType === "direct") return paymentLabels.direct;
+      return String(item?.paymentMethod || "カード未設定").trim() || "カード未設定";
+    }
+
+    function groupItemsByPaymentSource(items, account) {
+      const groups = new Map();
+      orderedItems(items).forEach(item => {
+        const key = paymentSourceOrderKey(account, item);
+        if (!groups.has(key)) {
+          groups.set(key, { key, label: paymentSourceLabel(item), items: [] });
+        }
+        groups.get(key).items.push(item);
+      });
+      return Array.from(groups.values()).sort((a, b) =>
+        orderRank(state.sortOrder.paymentSources, a.key) - orderRank(state.sortOrder.paymentSources, b.key)
       );
     }
 
@@ -3780,9 +3994,14 @@
           (activeStateSource === "seed" || remoteUpdatedAt > localUpdatedAt);
 
         if (shouldUseRemote) {
+          const remoteNeedsMigration = Number(data.state?.schemaVersion || 0) < 11;
           activeStateSource = "remote";
           replaceState(data.state, data.updated_at);
           render();
+          if (remoteNeedsMigration) {
+            await pushStateToCloud();
+            return;
+          }
           renderIntegrationStatus(`同期済み ${formatDateTime(data.updated_at)}`);
           return;
         }
