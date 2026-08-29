@@ -1148,6 +1148,11 @@
       color: var(--ink);
     }
 
+    .payment-method-table input::placeholder {
+      color: #7e756a;
+      opacity: 1;
+    }
+
     .payment-method-table input[aria-invalid="true"] {
       border-color: var(--rose);
       box-shadow: 0 0 0 2px rgba(169, 68, 66, .12);
@@ -1364,6 +1369,32 @@
         color: var(--ink);
       }
 
+      .payment-method-table {
+        background: #111a22;
+      }
+
+      .payment-method-table th {
+        border-color: #3a4c59;
+        background: #16232d;
+        color: #c4d0d8;
+      }
+
+      .payment-method-table td {
+        border-color: #3a4c59;
+        background: #111a22;
+      }
+
+      .payment-method-table input {
+        border-color: #4a5e6c;
+        background: #0c141b;
+        color: #f1f6f9;
+      }
+
+      .payment-method-table input::placeholder {
+        color: #92a1ac;
+        opacity: 1;
+      }
+
       .form-error {
         border-color: #7d4545;
         background: #321d1d;
@@ -1530,7 +1561,7 @@
       </div>
       <div class="field">
         <label for="paymentStartInput">作成日・加入日</label>
-        <input id="paymentStartInput" inputmode="numeric" placeholder="2026-06 または 2026-06-15" aria-describedby="paymentStartHelp">
+        <input id="paymentStartInput" inputmode="numeric" placeholder="YYYY-MM / YYYY-MM-DD" aria-describedby="paymentStartHelp">
         <p class="field-hint" id="paymentStartHelp">不明な場合は空欄にすると、すべての年月に表示されます。</p>
       </div>
       <div class="field">
@@ -1685,7 +1716,7 @@
     };
 
     const storageKey = "notion-payment-notes-v1";
-    const currentSchemaVersion = 12;
+    const currentSchemaVersion = 13;
     const config = window.APP_CONFIG || {};
     const syncTable = config.supabaseStateTable || "user_states";
     let activeStorageKey = storageKey;
@@ -1833,6 +1864,7 @@
         const saved = JSON.parse(raw);
         if (saved && Array.isArray(saved.months)) {
           const savedSchemaVersion = Number(saved.schemaVersion || 0);
+          backupStateBeforeV13Migration(saved, key);
           const normalized = normalizeState(saved);
           if (savedSchemaVersion < normalized.schemaVersion) {
             localStorage.setItem(key, JSON.stringify(normalized));
@@ -1843,6 +1875,21 @@
         console.warn(error);
       }
       return null;
+    }
+
+    function backupStateBeforeV13Migration(value, key = activeStorageKey) {
+      if (!value || typeof value !== "object" || Number(value.schemaVersion || 0) >= 13) return;
+      const backupKey = `${key}:backup:pre-v13`;
+      try {
+        if (localStorage.getItem(backupKey)) return;
+        localStorage.setItem(backupKey, JSON.stringify({
+          backedUpAt: new Date().toISOString(),
+          schemaVersion: Number(value.schemaVersion || 0),
+          state: structuredClone(value)
+        }));
+      } catch (error) {
+        console.warn("v13移行前バックアップを保存できませんでした。", error);
+      }
     }
 
     function persist(options = {}) {
@@ -1864,12 +1911,16 @@
       const normalized = value && typeof value === "object" ? value : structuredClone(seed);
       const sourceSchemaVersion = Number(normalized.schemaVersion || 0);
       normalized.months = Array.isArray(normalized.months) && normalized.months.length
-        ? normalized.months.map(normalizeMonth)
-        : structuredClone(seed.months).map(normalizeMonth);
+        ? normalized.months.map(month => normalizeMonth(month, sourceSchemaVersion >= 13))
+        : structuredClone(seed.months).map(month => normalizeMonth(month, sourceSchemaVersion >= 13));
       if (sourceSchemaVersion < 11) {
         migrateRecruitCardPayments(normalized.months);
       }
-      normalized.paymentMethods = normalizePaymentMethods(normalized.paymentMethods, normalized.months);
+      if (sourceSchemaVersion < 13) {
+        migratePaymentMethodsV13(normalized);
+      } else {
+        normalized.paymentMethods = normalizePaymentMethods(normalized.paymentMethods, normalized.months);
+      }
       syncAllPaymentMethodNames(normalized.paymentMethods, normalized.months);
       if (sourceSchemaVersion < currentSchemaVersion) {
         backfillPaymentMethodsForExistingMonths(normalized.paymentMethods, normalized.months);
@@ -1884,6 +1935,194 @@
       return normalized;
     }
 
+    function normalizePaymentMethodName(value) {
+      return String(value || "").normalize("NFKC").trim().replace(/\s+/g, " ");
+    }
+
+    function paymentMethodNameKey(value) {
+      return normalizePaymentMethodName(value).toLocaleLowerCase("ja-JP");
+    }
+
+    function findPaymentMethodByName(name, excludeId = "", methods = state.paymentMethods) {
+      const key = paymentMethodNameKey(name);
+      if (!key) return null;
+      return methods.find(method => method.id !== excludeId && paymentMethodNameKey(method.name) === key) || null;
+    }
+
+    function hasMeaningfulLegacyItemData(item) {
+      return Boolean(
+        String(item.amount || "").trim() || item.paid ||
+        String(item.usedDate || "").trim() || String(item.debitDate || "").trim() || item.debitDay ||
+        String(item.usagePeriodStart || "").trim() || String(item.usagePeriodEnd || "").trim() ||
+        String(item.paidDate || "").trim() || String(item.note || "").trim()
+      );
+    }
+
+    function migratePaymentMethodsV13(normalized) {
+      const removedSeries = new Set();
+      const placeholderSeries = new Set();
+      const sourceMethodNames = new Map((Array.isArray(normalized.paymentMethods) ? normalized.paymentMethods : [])
+        .map(method => [String(method?.id || ""), normalizePaymentMethodName(method?.name)]));
+      normalized.months.forEach(month => {
+        month.items = month.items.filter(item => {
+          const seriesId = String(item.seriesId || item.id);
+          const itemName = normalizePaymentMethodName(item.content);
+          if (itemName && itemName !== "内容未設定") return true;
+          const sourceMethodName = sourceMethodNames.get(seriesId) || "";
+          if (sourceMethodName && sourceMethodName !== "内容未設定") {
+            item.content = sourceMethodName;
+            return true;
+          }
+          if (!hasMeaningfulLegacyItemData(item)) {
+            removedSeries.add(seriesId);
+            return false;
+          }
+          placeholderSeries.add(seriesId);
+          item.content = "内容未設定";
+          return true;
+        });
+      });
+
+      const remainingSeries = new Set(normalized.months.flatMap(month =>
+        month.items.map(item => String(item.seriesId || item.id))
+      ));
+      let methods = normalizePaymentMethods(normalized.paymentMethods, normalized.months)
+        .filter(method => !removedSeries.has(method.id) || remainingSeries.has(method.id));
+      placeholderSeries.forEach(id => {
+        const method = methods.find(entry => entry.id === id);
+        if (method) method.name = "内容未設定";
+      });
+
+      const configuredOrder = Array.isArray(normalized.sortOrder?.series)
+        ? normalized.sortOrder.series.map(String)
+        : [];
+      const methodIndex = new Map(methods.map((method, index) => [method.id, index]));
+      const orderedMethods = methods.slice().sort((a, b) => {
+        const aOrder = configuredOrder.indexOf(a.id);
+        const bOrder = configuredOrder.indexOf(b.id);
+        const aRank = aOrder < 0 ? Number.MAX_SAFE_INTEGER : aOrder;
+        const bRank = bOrder < 0 ? Number.MAX_SAFE_INTEGER : bOrder;
+        return aRank - bRank || methodIndex.get(a.id) - methodIndex.get(b.id);
+      });
+      const canonicalByKey = new Map();
+      const idMap = new Map();
+      const groups = new Map();
+      orderedMethods.forEach(method => {
+        const key = paymentMethodNameKey(method.name);
+        const canMerge = key && method.name !== "内容未設定" && !placeholderSeries.has(method.id);
+        const canonical = canMerge ? canonicalByKey.get(key) : null;
+        if (!canonical) {
+          if (canMerge) canonicalByKey.set(key, method);
+          idMap.set(method.id, method.id);
+          groups.set(method.id, [method]);
+          return;
+        }
+        idMap.set(method.id, canonical.id);
+        groups.get(canonical.id).push(method);
+      });
+
+      remapExistingTrashReferences(normalized.trash, idMap, methods);
+      const conflictTrash = [];
+      normalized.months.forEach(month => {
+        const groupedItems = new Map();
+        month.items.forEach(item => {
+          const oldSeriesId = String(item.seriesId || item.id);
+          const canonicalId = idMap.get(oldSeriesId) || oldSeriesId;
+          if (!groupedItems.has(canonicalId)) groupedItems.set(canonicalId, []);
+          groupedItems.get(canonicalId).push({ item, oldSeriesId });
+        });
+        month.items = Array.from(groupedItems.entries()).map(([canonicalId, candidates]) => {
+          candidates.sort((a, b) => {
+            const aNative = a.item.id === a.oldSeriesId ? 1 : 0;
+            const bNative = b.item.id === b.oldSeriesId ? 1 : 0;
+            const aCanonical = a.oldSeriesId === canonicalId ? 1 : 0;
+            const bCanonical = b.oldSeriesId === canonicalId ? 1 : 0;
+            return bNative - aNative || bCanonical - aCanonical || itemDataScore(b.item) - itemDataScore(a.item);
+          });
+          const selected = candidates[0];
+          candidates.slice(1).forEach(candidate => {
+            if (hasConflictingItemData(selected.item, candidate.item)) {
+              const oldMethod = methods.find(method => method.id === candidate.oldSeriesId);
+              conflictTrash.push({
+                id: crypto.randomUUID(),
+                kind: "series",
+                label: `統合前データ: ${oldMethod?.name || candidate.item.content || "内容未設定"}`,
+                scope: "migration-conflict",
+                paymentMethod: oldMethod ? structuredClone(oldMethod) : null,
+                deletedAt: new Date().toISOString(),
+                entries: [{
+                  monthId: month.id,
+                  monthLabel: month.label,
+                  item: structuredClone(candidate.item)
+                }]
+              });
+            }
+            mergeDuplicateItem(selected.item, candidate.item);
+          });
+          selected.item.seriesId = canonicalId;
+          const canonicalMethod = methods.find(method => method.id === canonicalId);
+          if (canonicalMethod) selected.item.content = canonicalMethod.name;
+          return selected.item;
+        });
+      });
+
+      methods = orderedMethods.filter(method => idMap.get(method.id) === method.id).map(method => {
+        const mergedMethods = groups.get(method.id) || [method];
+        const startDates = mergedMethods.map(entry => normalizePaymentStartDate(entry.startDate)).filter(Boolean).sort();
+        return {
+          ...method,
+          name: normalizePaymentMethodName(method.name) || "内容未設定",
+          startDate: startDates[0] || ""
+        };
+      });
+      normalized.paymentMethods = methods;
+      if (!normalized.sortOrder || typeof normalized.sortOrder !== "object") normalized.sortOrder = {};
+      normalized.sortOrder.series = uniqueMappedIds(configuredOrder, idMap);
+      normalized.trash = [...(Array.isArray(normalized.trash) ? normalized.trash : []), ...conflictTrash];
+    }
+
+    function uniqueMappedIds(values, idMap) {
+      const result = [];
+      values.forEach(value => pushUnique(result, idMap.get(String(value)) || String(value)));
+      return result;
+    }
+
+    function itemDataScore(item) {
+      return ["amount", "usedDate", "debitDate", "debitDay", "usagePeriodStart", "usagePeriodEnd", "paidDate", "note"]
+        .reduce((score, field) => score + (item[field] !== "" && item[field] !== null && item[field] !== undefined ? 1 : 0), item.paid ? 1 : 0);
+    }
+
+    function hasConflictingItemData(target, duplicate) {
+      const fields = ["amount", "usedDate", "debitDate", "debitDay", "usagePeriodStart", "usagePeriodEnd", "paidDate", "note"];
+      return fields.some(field => {
+        const targetValue = target[field];
+        const duplicateValue = duplicate[field];
+        const targetHasValue = targetValue !== "" && targetValue !== null && targetValue !== undefined;
+        const duplicateHasValue = duplicateValue !== "" && duplicateValue !== null && duplicateValue !== undefined;
+        return targetHasValue && duplicateHasValue && String(targetValue) !== String(duplicateValue);
+      });
+    }
+
+    function remapExistingTrashReferences(trash, idMap, methods) {
+      if (!Array.isArray(trash)) return;
+      const remapItem = item => {
+        if (!item || typeof item !== "object") return;
+        const oldId = String(item.seriesId || item.id || "");
+        item.seriesId = idMap.get(oldId) || oldId;
+      };
+      trash.forEach(entry => {
+        if (entry?.kind === "month") entry.month?.items?.forEach(remapItem);
+        else if (entry?.kind === "series") {
+          entry.entries?.forEach(value => remapItem(value.item));
+          if (entry.paymentMethod) {
+            const canonicalId = idMap.get(String(entry.paymentMethod.id)) || String(entry.paymentMethod.id);
+            const canonical = methods.find(method => method.id === canonicalId);
+            entry.paymentMethod = canonical ? structuredClone(canonical) : { ...entry.paymentMethod, id: canonicalId };
+          }
+        } else remapItem(entry?.item);
+      });
+    }
+
     function migrateRecruitCardPayments(months) {
       const recruitContents = new Set(["ガス代", "電気", "水道", "mineo"]);
       months.forEach(month => {
@@ -1895,7 +2134,6 @@
           item.paymentType = "card";
           item.paymentMethod = "リクルートカード";
         });
-        month.items = dedupeMonthItems(month.items);
       });
     }
 
@@ -2108,13 +2346,13 @@
       };
     }
 
-    function normalizeMonth(month) {
+    function normalizeMonth(month, shouldDedupe = true) {
       const id = month?.id || seed.activeMonth;
       const items = Array.isArray(month?.items) ? month.items.map(item => normalizeItem(item, id)) : [];
       return {
         id,
         label: month?.label || formatMonthLabel(id),
-        items: dedupeMonthItems(items)
+        items: shouldDedupe ? dedupeMonthItems(items) : items
       };
     }
 
@@ -2603,6 +2841,7 @@
     }
 
     function replaceState(nextState, updatedAt) {
+      backupStateBeforeV13Migration(nextState, activeStorageKey);
       const normalized = normalizeState(structuredClone(nextState));
       normalized.updatedAt = updatedAt || normalized.updatedAt;
       Object.keys(state).forEach(key => delete state[key]);
@@ -3500,7 +3739,8 @@
           current: "この月から削除",
           after: "これ以降から削除",
           before: "これ以前から削除",
-          all: "すべての年月から削除"
+          all: "すべての年月から削除",
+          "migration-conflict": "統合前データ"
         };
         return {
           title: entry.label || "支払い方法",
@@ -3757,7 +3997,7 @@
         const row = document.createElement("tr");
         row.innerHTML = `
           <td><input value="${escapeAttr(method.name)}" data-master-field="name" aria-label="支払い方法名"></td>
-          <td><input value="${escapeAttr(method.startDate)}" data-master-field="startDate" inputmode="numeric" placeholder="YYYY-MM または YYYY-MM-DD" aria-label="${escapeAttr(method.name)}の作成日・加入日"></td>`;
+          <td><input value="${escapeAttr(method.startDate)}" data-master-field="startDate" inputmode="numeric" placeholder="YYYY-MM / YYYY-MM-DD" aria-label="${escapeAttr(method.name)}の作成日・加入日"></td>`;
         row.querySelectorAll("[data-master-field]").forEach(control => {
           control.addEventListener("change", () => commitPaymentMethodListEdit(method, control));
         });
@@ -3775,6 +4015,12 @@
       if (field === "name" && !value) {
         control.setAttribute("aria-invalid", "true");
         paymentMethodsError.textContent = "支払い方法名を入力してください。";
+        paymentMethodsError.classList.add("show");
+        return;
+      }
+      if (field === "name" && findPaymentMethodByName(value, method.id)) {
+        control.setAttribute("aria-invalid", "true");
+        paymentMethodsError.textContent = "同じ名前の支払い方法が既にあります。既存の項目を編集してください。";
         paymentMethodsError.classList.add("show");
         return;
       }
@@ -3867,6 +4113,12 @@
 
       if (!content) {
         showEntryError("内容を入力してください。");
+        return;
+      }
+
+      const editingMethodId = existingItem ? String(existingItem.seriesId || existingItem.id) : "";
+      if (findPaymentMethodByName(content, editingMethodId)) {
+        showEntryError("同じ名前の支払い方法が既にあります。既存の項目を編集してください。");
         return;
       }
 
