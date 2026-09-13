@@ -1134,7 +1134,11 @@
     }
 
     .payment-method-table th:first-child {
-      width: 52%;
+      width: 34%;
+    }
+
+    .payment-method-table th:nth-child(2) {
+      width: 34%;
     }
 
     .payment-method-table input {
@@ -1429,6 +1433,59 @@
       }
     }
 
+    @media (max-width: 600px) {
+      .payment-method-table,
+      .payment-method-table tbody {
+        display: block;
+      }
+
+      .payment-method-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      .payment-method-table tbody {
+        display: grid;
+        gap: 10px;
+      }
+
+      .payment-method-table tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 9px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 10px;
+        background: var(--panel);
+      }
+
+      .payment-method-table td {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+      }
+
+      .payment-method-table td:first-child {
+        grid-column: 1 / -1;
+      }
+
+      .payment-method-table td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+      }
+    }
+
     @media (max-width: 360px) {
       .payment-group {
         margin-left: 6px;
@@ -1664,7 +1721,7 @@
       <h2>支払い方法一覧</h2>
       <button class="icon-button" id="closePaymentMethodsSheetButton" type="button" title="閉じる" aria-label="支払い方法一覧を閉じる">×</button>
     </div>
-    <p class="payment-method-list-help">開始日は「2026-06」または「2026-06-15」の形式で入力できます。空欄の場合はすべての年月に表示します。</p>
+    <p class="payment-method-list-help">ここで口座を変更すると、その支払い方法のすべての年月に反映します。口座の空欄は未設定として扱います。開始日は「2026-06」または「2026-06-15」の形式で入力できます。</p>
     <p class="form-error" id="paymentMethodsError" role="alert"></p>
     <div class="payment-method-list" id="paymentMethodList"></div>
     <button class="primary" id="addPaymentMethodFromListButton" type="button">支払い方法を追加</button>
@@ -3594,6 +3651,34 @@
       );
     }
 
+    function normalizeDebitAccountName(value) {
+      return String(value || "").normalize("NFKC").trim().replace(/\s+/g, " ") || unassignedAccount;
+    }
+
+    function applyDebitAccountChange(seriesId, baseMonthId, value, scope) {
+      const targetSeriesId = String(seriesId || "");
+      const debitAccount = normalizeDebitAccountName(value);
+      state.months.forEach(month => {
+        const inRange = scope === "all" ||
+          (scope === "after" && month.id >= baseMonthId) ||
+          (scope === "current" && month.id === baseMonthId);
+        if (!inRange) return;
+        month.items.forEach(item => {
+          if (String(item.seriesId || item.id) === targetSeriesId) {
+            item.debitAccount = debitAccount;
+          }
+        });
+      });
+      const method = paymentMethodById(targetSeriesId);
+      if (method && scope !== "current") {
+        method.defaults = {
+          ...normalizePaymentMethodDefaults(method.defaults),
+          debitAccount
+        };
+      }
+      return debitAccount;
+    }
+
     function renderAccountSuggestions() {
       return accountValues();
     }
@@ -3986,24 +4071,30 @@
         paymentMethodList.innerHTML = '<div class="empty">支払い方法がありません</div>';
         return;
       }
+      const accountOptionsId = "paymentMethodAccountOptions";
+      const accountOptions = document.createElement("datalist");
+      accountOptions.id = accountOptionsId;
+      accountValues().forEach(account => accountOptions.appendChild(new Option(account, account)));
       const table = document.createElement("table");
       table.className = "payment-method-table";
-      table.innerHTML = "<thead><tr><th>支払い方法</th><th>作成日・加入日</th></tr></thead><tbody></tbody>";
+      table.innerHTML = "<thead><tr><th>支払い方法</th><th>引落口座</th><th>作成日・加入日</th></tr></thead><tbody></tbody>";
       const body = table.querySelector("tbody");
       state.paymentMethods.slice().sort((a, b) => {
         const rank = orderRank(state.sortOrder.series, a.id) - orderRank(state.sortOrder.series, b.id);
         return rank || a.name.localeCompare(b.name, "ja");
       }).forEach(method => {
         const row = document.createElement("tr");
+        const debitAccount = normalizePaymentMethodDefaults(method.defaults).debitAccount;
         row.innerHTML = `
-          <td><input value="${escapeAttr(method.name)}" data-master-field="name" aria-label="支払い方法名"></td>
-          <td><input value="${escapeAttr(method.startDate)}" data-master-field="startDate" inputmode="numeric" placeholder="YYYY-MM / YYYY-MM-DD" aria-label="${escapeAttr(method.name)}の作成日・加入日"></td>`;
+          <td data-label="支払い方法"><input value="${escapeAttr(method.name)}" data-master-field="name" aria-label="支払い方法名"></td>
+          <td data-label="引落口座"><input value="${escapeAttr(debitAccount === unassignedAccount ? "" : debitAccount)}" data-master-field="debitAccount" list="${accountOptionsId}" placeholder="未設定" aria-label="${escapeAttr(method.name)}の引落口座"></td>
+          <td data-label="作成日・加入日"><input value="${escapeAttr(method.startDate)}" data-master-field="startDate" inputmode="numeric" placeholder="YYYY-MM / YYYY-MM-DD" aria-label="${escapeAttr(method.name)}の作成日・加入日"></td>`;
         row.querySelectorAll("[data-master-field]").forEach(control => {
           control.addEventListener("change", () => commitPaymentMethodListEdit(method, control));
         });
         body.appendChild(row);
       });
-      paymentMethodList.appendChild(table);
+      paymentMethodList.append(accountOptions, table);
     }
 
     function commitPaymentMethodListEdit(method, control) {
@@ -4033,6 +4124,9 @@
       if (field === "name") {
         method.name = value;
         syncAllPaymentMethodNames(state.paymentMethods, state.months);
+      } else if (field === "debitAccount") {
+        const debitAccount = applyDebitAccountChange(method.id, state.activeMonth, value, "all");
+        control.value = debitAccount === unassignedAccount ? "" : debitAccount;
       } else {
         method.startDate = normalizePaymentStartDate(value);
       }
@@ -4144,7 +4238,7 @@
         : month.id;
 
       const payload = {
-        debitAccount,
+        debitAccount: normalizeDebitAccountName(debitAccount),
         paymentType,
         paymentMethod,
         content,
@@ -4161,35 +4255,86 @@
       };
 
       if (editingId) {
-        const item = existingItem;
-        Object.assign(item, { seriesId: item.seriesId || item.id }, payload);
-        let method = paymentMethodForItem(item);
-        if (!method) {
-          method = { id: item.seriesId, name: content, startDate: paymentStartDate, defaults: {} };
-          state.paymentMethods.push(method);
+        if (!existingItem) {
+          showEntryError("編集する明細が見つかりません。画面を閉じて再度お試しください。");
+          return;
         }
-        method.name = content;
-        method.startDate = normalizePaymentStartDate(paymentStartDate);
-        method.defaults = paymentMethodDefaultsFromItem(item, month.id);
-        syncAllPaymentMethodNames(state.paymentMethods, state.months);
-      } else {
-        const id = crypto.randomUUID();
-        const currentItem = normalizeItem({ id, seriesId: id, paid: false, ...payload }, month.id);
-        const method = {
-          id,
-          name: content,
-          startDate: normalizePaymentStartDate(paymentStartDate),
-          defaults: paymentMethodDefaultsFromItem(currentItem, month.id)
-        };
-        state.paymentMethods.push(method);
-        state.months.forEach(targetMonth => {
-          if (targetMonth.id === month.id) {
-            targetMonth.items.push(currentItem);
-          } else {
-            targetMonth.items.push(createItemFromPaymentMethod(method, targetMonth.id, currentItem, month.id));
-          }
-        });
+        const accountChanged = normalizeDebitAccountName(existingItem.debitAccount) !== payload.debitAccount;
+        if (accountChanged) {
+          requestDebitAccountEditScope(existingItem, payload, paymentStartDate, month.id);
+          return;
+        }
+        commitExistingEntryEdit(existingItem, payload, paymentStartDate, month.id);
+        return;
       }
+
+      const id = crypto.randomUUID();
+      const currentItem = normalizeItem({ id, seriesId: id, paid: false, ...payload }, month.id);
+      const method = {
+        id,
+        name: content,
+        startDate: normalizePaymentStartDate(paymentStartDate),
+        defaults: paymentMethodDefaultsFromItem(currentItem, month.id)
+      };
+      state.paymentMethods.push(method);
+      state.months.forEach(targetMonth => {
+        if (targetMonth.id === month.id) {
+          targetMonth.items.push(currentItem);
+        } else {
+          targetMonth.items.push(createItemFromPaymentMethod(method, targetMonth.id, currentItem, month.id));
+        }
+      });
+      persist();
+      closeSheet();
+      render();
+    }
+
+    function requestDebitAccountEditScope(item, payload, paymentStartDate, monthId) {
+      const previousAccount = normalizeDebitAccountName(item.debitAccount);
+      const nextAccount = normalizeDebitAccountName(payload.debitAccount);
+      const label = paymentMethodName(item);
+      openConfirmation({
+        title: "口座の変更範囲",
+        message: `${label}の引落口座を「${previousAccount}」から「${nextAccount}」へ変更します。反映する年月を選んでください。`,
+        actions: [
+          {
+            label: "これまでとこれ以降の全て",
+            className: "secondary",
+            handler: () => commitExistingEntryEdit(item, payload, paymentStartDate, monthId, "all")
+          },
+          {
+            label: "これ以降",
+            className: "secondary",
+            handler: () => commitExistingEntryEdit(item, payload, paymentStartDate, monthId, "after")
+          },
+          {
+            label: "この月のみ",
+            className: "secondary",
+            handler: () => commitExistingEntryEdit(item, payload, paymentStartDate, monthId, "current")
+          }
+        ]
+      });
+    }
+
+    function commitExistingEntryEdit(item, payload, paymentStartDate, monthId, accountScope = "") {
+      const seriesId = String(item.seriesId || item.id);
+      let method = paymentMethodForItem(item);
+      const previousDefaults = normalizePaymentMethodDefaults(method?.defaults);
+      Object.assign(item, { seriesId }, payload);
+      if (!method) {
+        method = { id: seriesId, name: payload.content, startDate: paymentStartDate, defaults: previousDefaults };
+        state.paymentMethods.push(method);
+      }
+      method.name = payload.content;
+      method.startDate = normalizePaymentStartDate(paymentStartDate);
+      method.defaults = paymentMethodDefaultsFromItem(item, monthId);
+      if (accountScope === "current") {
+        method.defaults.debitAccount = previousDefaults.debitAccount;
+      }
+      if (accountScope) {
+        applyDebitAccountChange(seriesId, monthId, payload.debitAccount, accountScope);
+      }
+      syncAllPaymentMethodNames(state.paymentMethods, state.months);
       persist();
       closeSheet();
       render();
