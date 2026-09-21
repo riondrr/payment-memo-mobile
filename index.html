@@ -1540,12 +1540,12 @@
 
     <section class="summary" aria-label="集計">
       <div class="metric">
-        <span>今月の引落合計</span>
+        <span>引落合計</span>
         <strong id="totalAmount">¥0</strong>
       </div>
       <div class="metric">
-        <span>支払い済み</span>
-        <strong id="paidCount">0 / 0</strong>
+        <span>未払い額</span>
+        <strong id="unpaidAmount">¥0</strong>
       </div>
     </section>
 
@@ -1560,7 +1560,7 @@
 
     <section class="primary-actions" aria-label="追加操作">
       <button class="soft-button" id="addMonthButton" type="button">月を追加</button>
-      <button class="soft-button" id="addEntryButton" type="button">支払い方法を追加</button>
+      <button class="soft-button" id="addEntryButton" type="button">カード・引落を追加</button>
     </section>
 
     <section class="search-actions" aria-label="検索と並び替え">
@@ -1590,7 +1590,7 @@
   <aside class="sheet" id="entrySheet" aria-hidden="true">
     <form id="entryForm" novalidate>
       <div class="sheet-head">
-        <h2 id="sheetTitle">明細</h2>
+        <h2 id="sheetTitle">カード・引落</h2>
         <button class="icon-button" id="closeSheetButton" type="button" title="閉じる" aria-label="閉じる">×</button>
       </div>
       <div class="field">
@@ -1613,7 +1613,7 @@
         <input id="paymentMethodInput" placeholder="リクルートカード">
       </div>
       <div class="field">
-        <label for="contentInput">内容</label>
+        <label for="contentInput">名前・用途</label>
         <input id="contentInput" required>
       </div>
       <div class="field">
@@ -1621,7 +1621,7 @@
         <input id="paymentStartInput" inputmode="numeric" placeholder="YYYY-MM / YYYY-MM-DD" aria-describedby="paymentStartHelp">
         <p class="field-hint" id="paymentStartHelp">不明な場合は空欄にすると、すべての年月に表示されます。</p>
       </div>
-      <div class="field">
+      <div class="field" id="billingCycleField">
         <label for="billingCycleInput">支払い周期</label>
         <select id="billingCycleInput">
           <option value="1">毎月</option>
@@ -1688,7 +1688,7 @@
       <h2>設定</h2>
       <button class="icon-button" id="closeSettingsSheetButton" type="button" title="閉じる" aria-label="設定を閉じる">×</button>
     </div>
-    <button class="secondary" id="paymentMethodsButton" type="button">支払い方法一覧</button>
+    <button class="secondary" id="paymentMethodsButton" type="button">カード・引落一覧</button>
     <button class="secondary settings-trash-button" id="trashButton" type="button">最近削除</button>
     <button class="danger settings-delete-month-button" id="deleteMonthButton" type="button">表示中の年月を削除</button>
     <div class="status">
@@ -1718,13 +1718,13 @@
   </aside>
   <aside class="sheet" id="paymentMethodsSheet" aria-hidden="true">
     <div class="sheet-head">
-      <h2>支払い方法一覧</h2>
-      <button class="icon-button" id="closePaymentMethodsSheetButton" type="button" title="閉じる" aria-label="支払い方法一覧を閉じる">×</button>
+      <h2>カード・引落一覧</h2>
+      <button class="icon-button" id="closePaymentMethodsSheetButton" type="button" title="閉じる" aria-label="カード・引落一覧を閉じる">×</button>
     </div>
-    <p class="payment-method-list-help">ここで口座を変更すると、その支払い方法のすべての年月に反映します。口座の空欄は未設定として扱います。開始日は「2026-06」または「2026-06-15」の形式で入力できます。</p>
+    <p class="payment-method-list-help">ここで変更すると、そのカード・引落のすべての年月に反映します。口座の空欄は未設定として扱います。開始日は「2026-06」または「2026-06-15」の形式で入力できます。</p>
     <p class="form-error" id="paymentMethodsError" role="alert"></p>
     <div class="payment-method-list" id="paymentMethodList"></div>
-    <button class="primary" id="addPaymentMethodFromListButton" type="button">支払い方法を追加</button>
+    <button class="primary" id="addPaymentMethodFromListButton" type="button">カード・引落を追加</button>
   </aside>
   <aside class="sheet" id="confirmSheet" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
     <div class="sheet-head">
@@ -1758,10 +1758,7 @@
           label: "2026年5月",
           items: [
             { id: "sbi-rent", seriesId: "sbi-rent", debitAccount: "住信SBIネット銀行", paymentType: "direct", paymentMethod: "", content: "家賃", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
-            { id: "recruit-gas", seriesId: "recruit-gas", debitAccount: "住信SBIネット銀行", paymentType: "card", paymentMethod: "リクルートカード", content: "ガス代", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
-            { id: "recruit-electricity", seriesId: "recruit-electricity", debitAccount: "住信SBIネット銀行", paymentType: "card", paymentMethod: "リクルートカード", content: "電気", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
-            { id: "recruit-water", seriesId: "recruit-water", debitAccount: "住信SBIネット銀行", paymentType: "card", paymentMethod: "リクルートカード", content: "水道", amount: "", debitDay: null, billingCycleMonths: 2, billingStartMonth: "2026-05", note: "", paid: false },
-            { id: "recruit-mineo", seriesId: "recruit-mineo", debitAccount: "住信SBIネット銀行", paymentType: "card", paymentMethod: "リクルートカード", content: "mineo", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
+            { id: "recruit-card", seriesId: "recruit-card", debitAccount: "住信SBIネット銀行", paymentType: "card", paymentMethod: "リクルートカード", content: "光熱費", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
             { id: "paypay-bank", seriesId: "paypay-bank", debitAccount: "PayPay銀行", paymentType: "direct", paymentMethod: "", content: "", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
             { id: "paypay-card", seriesId: "paypay-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "PayPayカード", content: "普段使い", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
             { id: "orico-card", seriesId: "orico-card", debitAccount: unassignedAccount, paymentType: "card", paymentMethod: "オリコカード", content: "予備", amount: "", debitDay: null, billingCycleMonths: 1, billingStartMonth: "2026-05", note: "", paid: false },
@@ -1773,7 +1770,7 @@
     };
 
     const storageKey = "notion-payment-notes-v1";
-    const currentSchemaVersion = 13;
+    const currentSchemaVersion = 14;
     const config = window.APP_CONFIG || {};
     const syncTable = config.supabaseStateTable || "user_states";
     let activeStorageKey = storageKey;
@@ -1801,7 +1798,7 @@
     const monthlyTableToggle = document.getElementById("monthlyTableToggle");
     const monthlyTableWrap = document.getElementById("monthlyTableWrap");
     const totalAmount = document.getElementById("totalAmount");
-    const paidCount = document.getElementById("paidCount");
+    const unpaidAmount = document.getElementById("unpaidAmount");
     const searchInput = document.getElementById("searchInput");
     const reorderButton = document.getElementById("reorderButton");
     const trashButton = document.getElementById("trashButton");
@@ -1850,6 +1847,7 @@
     const contentInput = document.getElementById("contentInput");
     const paymentStartInput = document.getElementById("paymentStartInput");
     const billingCycleInput = document.getElementById("billingCycleInput");
+    const billingCycleField = document.getElementById("billingCycleField");
     const customBillingCycleField = document.getElementById("customBillingCycleField");
     const customBillingCycleInput = document.getElementById("customBillingCycleInput");
     const noteInput = document.getElementById("noteInput");
@@ -1921,7 +1919,7 @@
         const saved = JSON.parse(raw);
         if (saved && Array.isArray(saved.months)) {
           const savedSchemaVersion = Number(saved.schemaVersion || 0);
-          backupStateBeforeV13Migration(saved, key);
+          backupStateBeforeV14Migration(saved, key);
           const normalized = normalizeState(saved);
           if (savedSchemaVersion < normalized.schemaVersion) {
             localStorage.setItem(key, JSON.stringify(normalized));
@@ -1934,9 +1932,9 @@
       return null;
     }
 
-    function backupStateBeforeV13Migration(value, key = activeStorageKey) {
-      if (!value || typeof value !== "object" || Number(value.schemaVersion || 0) >= 13) return;
-      const backupKey = `${key}:backup:pre-v13`;
+    function backupStateBeforeV14Migration(value, key = activeStorageKey) {
+      if (!value || typeof value !== "object" || Number(value.schemaVersion || 0) >= 14) return;
+      const backupKey = `${key}:backup:pre-v14`;
       try {
         if (localStorage.getItem(backupKey)) return;
         localStorage.setItem(backupKey, JSON.stringify({
@@ -1945,7 +1943,7 @@
           state: structuredClone(value)
         }));
       } catch (error) {
-        console.warn("v13移行前バックアップを保存できませんでした。", error);
+        console.warn("v14移行前バックアップを保存できませんでした。", error);
       }
     }
 
@@ -1978,6 +1976,9 @@
       } else {
         normalized.paymentMethods = normalizePaymentMethods(normalized.paymentMethods, normalized.months);
       }
+      if (sourceSchemaVersion < 14) {
+        migrateCardPaymentsV14(normalized);
+      }
       syncAllPaymentMethodNames(normalized.paymentMethods, normalized.months);
       if (sourceSchemaVersion < currentSchemaVersion) {
         backfillPaymentMethodsForExistingMonths(normalized.paymentMethods, normalized.months);
@@ -2000,10 +2001,23 @@
       return normalizePaymentMethodName(value).toLocaleLowerCase("ja-JP");
     }
 
-    function findPaymentMethodByName(name, excludeId = "", methods = state.paymentMethods) {
-      const key = paymentMethodNameKey(name);
-      if (!key) return null;
-      return methods.find(method => method.id !== excludeId && paymentMethodNameKey(method.name) === key) || null;
+    function findDuplicatePaymentLine(paymentType, paymentMethod, content, excludeId = "", methods = state.paymentMethods) {
+      if (normalizePaymentType(paymentType) === "card") {
+        const cardKey = paymentMethodNameKey(paymentMethod);
+        if (!cardKey) return null;
+        return methods.find(method => {
+          if (method.id === excludeId) return false;
+          const defaults = normalizePaymentMethodDefaults(method.defaults);
+          return defaults.paymentType === "card" && paymentMethodNameKey(defaults.paymentMethod) === cardKey;
+        }) || null;
+      }
+      const contentKey = paymentMethodNameKey(content);
+      if (!contentKey) return null;
+      return methods.find(method => {
+        if (method.id === excludeId) return false;
+        const defaults = normalizePaymentMethodDefaults(method.defaults);
+        return defaults.paymentType === "direct" && paymentMethodNameKey(method.name) === contentKey;
+      }) || null;
     }
 
     function hasMeaningfulLegacyItemData(item) {
@@ -2065,8 +2079,12 @@
       const idMap = new Map();
       const groups = new Map();
       orderedMethods.forEach(method => {
-        const key = paymentMethodNameKey(method.name);
-        const canMerge = key && method.name !== "内容未設定" && !placeholderSeries.has(method.id);
+        const defaults = normalizePaymentMethodDefaults(method.defaults);
+        const nameKey = paymentMethodNameKey(method.name);
+        const key = defaults.paymentType === "card"
+          ? JSON.stringify(["card", paymentMethodNameKey(defaults.paymentMethod), nameKey])
+          : JSON.stringify(["direct", nameKey]);
+        const canMerge = nameKey && method.name !== "内容未設定" && !placeholderSeries.has(method.id);
         const canonical = canMerge ? canonicalByKey.get(key) : null;
         if (!canonical) {
           if (canMerge) canonicalByKey.set(key, method);
@@ -2136,6 +2154,142 @@
       if (!normalized.sortOrder || typeof normalized.sortOrder !== "object") normalized.sortOrder = {};
       normalized.sortOrder.series = uniqueMappedIds(configuredOrder, idMap);
       normalized.trash = [...(Array.isArray(normalized.trash) ? normalized.trash : []), ...conflictTrash];
+    }
+
+    function migrateCardPaymentsV14(normalized) {
+      const methods = normalizePaymentMethods(normalized.paymentMethods, normalized.months);
+      const configuredOrder = Array.isArray(normalized.sortOrder?.series)
+        ? normalized.sortOrder.series.map(String)
+        : [];
+      const canonicalByCard = new Map();
+      const idMap = new Map();
+      const methodGroups = new Map();
+
+      methods.forEach(method => {
+        const defaults = normalizePaymentMethodDefaults(method.defaults);
+        const cardName = normalizePaymentMethodName(defaults.paymentMethod);
+        if (defaults.paymentType !== "card" || !cardName) {
+          idMap.set(method.id, method.id);
+          methodGroups.set(method.id, [method]);
+          return;
+        }
+        const key = paymentMethodNameKey(cardName);
+        const canonical = canonicalByCard.get(key);
+        if (!canonical) {
+          canonicalByCard.set(key, method);
+          idMap.set(method.id, method.id);
+          methodGroups.set(method.id, [method]);
+          return;
+        }
+        idMap.set(method.id, canonical.id);
+        methodGroups.get(canonical.id).push(method);
+      });
+
+      remapExistingTrashReferences(normalized.trash, idMap, methods);
+      normalized.months.forEach(month => {
+        const groupedItems = new Map();
+        month.items.forEach(item => {
+          const oldSeriesId = String(item.seriesId || item.id);
+          const canonicalId = idMap.get(oldSeriesId) || oldSeriesId;
+          if (!groupedItems.has(canonicalId)) groupedItems.set(canonicalId, []);
+          groupedItems.get(canonicalId).push(item);
+        });
+        month.items = Array.from(groupedItems.entries()).map(([canonicalId, candidates]) => {
+          const methodGroup = methodGroups.get(canonicalId) || [];
+          const canonicalMethod = methods.find(method => method.id === canonicalId);
+          const defaults = normalizePaymentMethodDefaults(canonicalMethod?.defaults);
+          if (defaults.paymentType !== "card") {
+            const item = candidates[0];
+            item.seriesId = canonicalId;
+            return item;
+          }
+          return mergeCardItemsForMonth(candidates, canonicalId, defaults.paymentMethod, methodGroup, month.id);
+        });
+      });
+
+      normalized.paymentMethods = methods
+        .filter(method => idMap.get(method.id) === method.id)
+        .map(method => {
+          const group = methodGroups.get(method.id) || [method];
+          const defaults = normalizePaymentMethodDefaults(method.defaults);
+          if (defaults.paymentType !== "card") return method;
+          const cardName = normalizePaymentMethodName(defaults.paymentMethod);
+          const purposes = uniqueNonEmpty(group.map(entry => normalizePaymentMethodName(entry.name)));
+          const startDates = group.map(entry => normalizePaymentStartDate(entry.startDate)).filter(Boolean).sort();
+          const debitDays = group.map(entry => normalizePaymentMethodDefaults(entry.defaults).debitDay);
+          return {
+            ...method,
+            name: isRecruitCardName(cardName) ? "光熱費" : purposes.join("・") || "用途未設定",
+            startDate: startDates[0] || "",
+            defaults: {
+              ...defaults,
+              paymentType: "card",
+              paymentMethod: isRecruitCardName(cardName) ? "リクルートカード" : cardName,
+              debitDay: unanimousNonEmptyValue(debitDays),
+              billingCycleMonths: 1,
+              billingStartMonth: group
+                .map(entry => normalizePaymentMethodDefaults(entry.defaults).billingStartMonth)
+                .sort()[0] || defaults.billingStartMonth
+            }
+          };
+        });
+      if (!normalized.sortOrder || typeof normalized.sortOrder !== "object") normalized.sortOrder = {};
+      normalized.sortOrder.series = uniqueMappedIds(configuredOrder, idMap);
+    }
+
+    function mergeCardItemsForMonth(candidates, canonicalId, cardName, methodGroup, monthId) {
+      const selected = candidates.slice().sort((a, b) => itemDataScore(b) - itemDataScore(a))[0];
+      const normalizedCardName = isRecruitCardName(cardName) ? "リクルートカード" : normalizePaymentMethodName(cardName);
+      const purposes = uniqueNonEmpty([
+        ...methodGroup.map(method => normalizePaymentMethodName(method.name)),
+        ...candidates.map(item => normalizePaymentMethodName(item.content))
+      ]);
+      const hasAmount = candidates.some(item => String(item.amount || "").trim());
+      const notes = uniqueNonEmpty(candidates.map(item => String(item.note || "").trim()));
+      const debitDates = candidates.map(item => normalizeDateValue(item.debitDate));
+      const debitDays = candidates.map(item => dayFromDate(item.debitDate) || normalizeDebitDay(item.debitDay));
+      const paid = candidates.length > 0 && candidates.every(item => Boolean(item.paid));
+      selected.seriesId = canonicalId;
+      selected.paymentType = "card";
+      selected.paymentMethod = normalizedCardName;
+      selected.content = isRecruitCardName(normalizedCardName) ? "光熱費" : purposes.join("・") || "用途未設定";
+      selected.amount = hasAmount ? String(candidates.reduce((sum, item) => sum + toNumber(item.amount), 0)) : "";
+      selected.usedDate = unanimousNonEmptyValue(candidates.map(item => normalizeDateValue(item.usedDate))) || "";
+      selected.debitDate = unanimousNonEmptyValue(debitDates) || "";
+      selected.debitDay = selected.debitDate ? dayFromDate(selected.debitDate) : unanimousNonEmptyValue(debitDays);
+      selected.billingCycleMonths = 1;
+      selected.billingStartMonth = candidates
+        .map(item => normalizeBillingStartMonth(item.billingStartMonth, monthId))
+        .sort()[0] || monthId;
+      if (candidates.length > 1) {
+        selected.usagePeriodStart = "";
+        selected.usagePeriodEnd = "";
+      }
+      selected.paidDate = paid
+        ? unanimousNonEmptyValue(candidates.map(item => normalizeDateValue(item.paidDate))) || ""
+        : "";
+      selected.note = notes.join(" / ");
+      selected.paid = paid;
+      return selected;
+    }
+
+    function uniqueNonEmpty(values) {
+      const result = [];
+      values.forEach(value => {
+        const text = String(value || "").trim();
+        if (text && !result.includes(text)) result.push(text);
+      });
+      return result;
+    }
+
+    function unanimousNonEmptyValue(values) {
+      if (!values.length || values.some(value => value === "" || value === null || value === undefined)) return null;
+      const first = values[0];
+      return values.every(value => String(value) === String(first)) ? first : null;
+    }
+
+    function isRecruitCardName(value) {
+      return paymentMethodNameKey(value) === paymentMethodNameKey("リクルートカード");
     }
 
     function uniqueMappedIds(values, idMap) {
@@ -2289,6 +2443,17 @@
       return paymentMethodForItem(item, methods)?.name || String(item?.content || "").trim() || "内容未設定";
     }
 
+    function paymentLineDisplayName(item, methods = state.paymentMethods) {
+      if (normalizePaymentType(item?.paymentType) === "card") {
+        return String(item?.paymentMethod || "カード未設定").trim() || "カード未設定";
+      }
+      return paymentMethodName(item, methods);
+    }
+
+    function paymentLinePurposeName(item, methods = state.paymentMethods) {
+      return normalizePaymentType(item?.paymentType) === "card" ? paymentMethodName(item, methods) : "";
+    }
+
     function isPaymentMethodVisibleInMonth(item, monthId, methods = state.paymentMethods) {
       const startDate = paymentMethodForItem(item, methods)?.startDate || "";
       return !startDate || String(monthId) >= startDate.slice(0, 7);
@@ -2387,7 +2552,9 @@
         return {
           ...base,
           kind: "series",
-          label: String(entry.label || entries[0].item.content || "支払い方法"),
+          label: String(entry.label || (normalizePaymentType(entries[0].item.paymentType) === "card"
+            ? entries[0].item.paymentMethod
+            : entries[0].item.content) || "カード・引落"),
           scope: String(entry.scope || "all"),
           paymentMethod: normalizePaymentMethod(entry.paymentMethod),
           entries
@@ -2898,7 +3065,7 @@
     }
 
     function replaceState(nextState, updatedAt) {
-      backupStateBeforeV13Migration(nextState, activeStorageKey);
+      backupStateBeforeV14Migration(nextState, activeStorageKey);
       const normalized = normalizeState(structuredClone(nextState));
       normalized.updatedAt = updatedAt || normalized.updatedAt;
       Object.keys(state).forEach(key => delete state[key]);
@@ -3028,7 +3195,7 @@
         const eventMarkup = dayEvents.slice(0, 3).map(event => {
           const eventClass = event.item.paid ? "paid" : "planned";
           const suffix = event.item.paid ? " 支払い済み" : " 予定";
-          return `<span class="calendar-event ${eventClass}">${escapeHtml(event.item.content || "明細")}${suffix}</span>`;
+          return `<span class="calendar-event ${eventClass}">${escapeHtml(paymentLineDisplayName(event.item))}${suffix}</span>`;
         }).join("");
         button.innerHTML = `<span class="calendar-date-number">${day}</span>${eventMarkup}${dayEvents.length > 3 ? `<span class="calendar-event">ほか${dayEvents.length - 3}件</span>` : ""}`;
         button.addEventListener("click", () => openDaySheet(date));
@@ -3071,8 +3238,8 @@
         const element = document.createElement("div");
         element.className = "day-detail-item";
         element.innerHTML = `
-          <strong>${escapeHtml(event.item.content || "内容未設定")}</strong>
-          <span>${escapeHtml(event.sourceMonth.label)}・${escapeHtml(event.item.debitAccount || unassignedAccount)}</span>
+          <strong>${escapeHtml(paymentLineDisplayName(event.item))}</strong>
+          <span>${escapeHtml([paymentLinePurposeName(event.item), event.sourceMonth.label, event.item.debitAccount || unassignedAccount].filter(Boolean).join("・"))}</span>
           <span>${event.item.paid ? "支払い済み" : "引落予定"}</span>
           <button class="secondary" type="button" data-day-action="paid">${event.item.paid ? "未払いに戻す" : "支払い済みにする"}</button>`;
         element.querySelector('[data-day-action="paid"]').addEventListener("click", () => {
@@ -3130,7 +3297,7 @@
       if (kind === "paymentSource") {
         return Array.from(container.closest(".account-group").querySelectorAll(":scope > .account-items > .payment-group"));
       }
-      return Array.from(container.closest(".payment-group").querySelectorAll(":scope > .payment-group-items > .entry"));
+      return Array.from(container.closest(".account-group").querySelectorAll(":scope > .account-items > .entry"));
     }
 
     function dragTargetKey(kind, target) {
@@ -3155,7 +3322,7 @@
       const candidate = document.elementFromPoint(clientX, clientY)?.closest(selector);
       const sameScope = dragState.kind === "account" ||
         (dragState.kind === "paymentSource" && candidate?.dataset.account === dragState.scope) ||
-        (dragState.kind === "series" && candidate?.dataset.paymentSourceKey === dragState.scope);
+        (dragState.kind === "series" && candidate?.dataset.account === dragState.scope);
       const validCandidate = candidate && candidate !== dragState.container && sameScope ? candidate : null;
       if (dragState.target === validCandidate) return;
       dragState.target?.classList.remove("drop-target");
@@ -3225,8 +3392,8 @@
       const rows = sortedItems.length
         ? sortedItems.map(item => `
             <tr>
-              <td>${escapeHtml(paymentMethodName(item))}</td>
-              <td>${formatAmount(item.amount)}</td>
+              <td>${escapeHtml(paymentLineDisplayName(item))}${paymentLinePurposeName(item) ? `<br><small>${escapeHtml(paymentLinePurposeName(item))}</small>` : ""}</td>
+              <td>${formatOptionalAmount(item.amount)}</td>
             </tr>
           `).join("")
         : `<tr><td colspan="2">明細がありません</td></tr>`;
@@ -3300,12 +3467,12 @@
       reorderButton.classList.toggle("active", reorderMode);
       reorderButton.setAttribute("aria-pressed", String(reorderMode));
       reorderButton.disabled = Boolean(query);
-      reorderButton.title = query ? "検索を解除すると並び替えできます" : "銀行・支払経路・明細を並び替え";
+      reorderButton.title = query ? "検索を解除すると並び替えできます" : "口座・カード・引落を並び替え";
 
       if (!accountGroups.length) {
         const empty = document.createElement("div");
         empty.className = "empty";
-        empty.textContent = "該当する明細がありません";
+        empty.textContent = "該当するカード・引落がありません";
         list.appendChild(empty);
         return;
       }
@@ -3334,51 +3501,7 @@
         `;
 
         const accountItems = section.querySelector(".account-items");
-        const paymentGroups = groupItemsByPaymentSource(group.items, group.account);
-        paymentGroups.forEach(paymentGroup => {
-          const paymentSection = document.createElement("section");
-          paymentSection.className = "payment-group";
-          paymentSection.dataset.paymentSourceKey = paymentGroup.key;
-          paymentSection.dataset.account = group.account;
-          const paymentGroupKey = `${month.id}\u0000${paymentGroup.key}`;
-          const isPaymentExpanded = Boolean(query) || expandedPaymentGroups.has(paymentGroupKey);
-          const paymentSum = paymentGroup.items.reduce((acc, item) => acc + toNumber(item.amount), 0);
-          const paymentPaid = paymentGroup.items.filter(item => item.paid).length;
-          paymentSection.innerHTML = `
-            <div class="payment-group-head">
-              <button class="drag-handle payment-group-drag-handle" type="button" aria-label="${escapeAttr(paymentGroup.label)}を並び替え">≡</button>
-              <button class="payment-group-toggle" type="button" aria-expanded="${String(isPaymentExpanded)}">
-                <span class="payment-group-chevron" aria-hidden="true">⌄</span>
-                <span class="payment-group-title">
-                  <strong>${escapeHtml(paymentGroup.label)}</strong>
-                  <span>支払い済み ${paymentPaid} / ${paymentGroup.items.length}</span>
-                </span>
-              </button>
-              <div class="payment-group-total">${formatAmount(paymentSum)}</div>
-            </div>
-            <div class="payment-group-items" ${isPaymentExpanded ? "" : "hidden"}></div>
-          `;
-          const paymentItems = paymentSection.querySelector(".payment-group-items");
-          paymentGroup.items.forEach(item => paymentItems.appendChild(renderEntryCard(item, month.id)));
-          bindDragHandle(
-            paymentSection.querySelector(".payment-group-drag-handle"),
-            "paymentSource",
-            paymentGroup.key,
-            group.account,
-            paymentSection
-          );
-          paymentSection.querySelector(".payment-group-toggle").addEventListener("click", event => {
-            const collapsed = !paymentItems.hidden;
-            paymentItems.hidden = collapsed;
-            event.currentTarget.setAttribute("aria-expanded", String(!collapsed));
-            if (collapsed) {
-              expandedPaymentGroups.delete(paymentGroupKey);
-            } else {
-              expandedPaymentGroups.add(paymentGroupKey);
-            }
-          });
-          accountItems.appendChild(paymentSection);
-        });
+        orderedItems(group.items).forEach(item => accountItems.appendChild(renderEntryCard(item, month.id)));
         bindDragHandle(section.querySelector(".account-drag-handle"), "account", group.account, group.account, section);
         section.querySelector(".account-toggle").addEventListener("click", event => {
           const collapsed = !accountItems.hidden;
@@ -3396,7 +3519,8 @@
 
     function renderEntryCard(item, monthId) {
       const article = document.createElement("article");
-      const displayName = paymentMethodName(item);
+      const displayName = paymentLineDisplayName(item);
+      const purposeName = paymentLinePurposeName(item);
       const billingCycleMonths = normalizeBillingCycleMonths(item.billingCycleMonths);
       const debitDate = item.debitDate || dateFromMonthAndDay(monthId, item.debitDay);
       const debitDayLabel = formatDebitDayLabel(debitDate);
@@ -3415,6 +3539,7 @@
             <div class="entry-title">
               <strong>${escapeHtml(displayName)}</strong>
               <div class="entry-meta">
+                ${purposeName ? `<span>${escapeHtml(purposeName)}</span>` : ""}
                 ${billingCycleMonths > 1 ? `<span class="billing-cycle">${billingCycleLabel(billingCycleMonths)}</span>` : ""}
               </div>
             </div>
@@ -3465,7 +3590,7 @@
         article.querySelector(".entry-drag-handle"),
         "series",
         item.seriesId || item.id,
-        paymentSourceOrderKey(item.debitAccount || unassignedAccount, item),
+        item.debitAccount || unassignedAccount,
         article
       );
       article.querySelector(".entry-edit").addEventListener("click", () => openSheet(item.id));
@@ -3709,9 +3834,8 @@
       const month = currentMonth();
       const visibleItems = visibleItemsForMonth(month);
       const sum = visibleItems.reduce((acc, item) => acc + toNumber(item.amount), 0);
-      const paid = visibleItems.filter(item => item.paid).length;
       totalAmount.textContent = formatAmount(sum);
-      paidCount.textContent = `${paid} / ${visibleItems.length}`;
+      unpaidAmount.textContent = formatAmount(calculateUnpaidAmount(visibleItems));
     }
 
     function openMonthSheet() {
@@ -3816,7 +3940,7 @@
       if (entry.kind === "month") {
         return {
           title: entry.month.label,
-          description: `年月全体・支払い方法 ${entry.month.items.length}件`
+          description: `年月全体・カード・引落 ${entry.month.items.length}件`
         };
       }
       if (entry.kind === "series") {
@@ -3828,7 +3952,7 @@
           "migration-conflict": "統合前データ"
         };
         return {
-          title: entry.label || "支払い方法",
+          title: entry.label || "カード・引落",
           description: `${scopeLabels[entry.scope] || scopeLabels.all}・${entry.entries.length}か月分`
         };
       }
@@ -3927,7 +4051,7 @@
       }
       openConfirmation({
         title: `${month.label}を削除`,
-        message: `${month.label}と、その月の支払い方法 ${month.items.length}件を削除します。\n削除後30日間は「最近削除」から復元できます。`,
+        message: `${month.label}と、その月のカード・引落 ${month.items.length}件を削除します。\n削除後30日間は「最近削除」から復元できます。`,
         actions: [{
           label: "年月ごと削除",
           className: "danger",
@@ -4015,7 +4139,7 @@
       const method = item ? paymentMethodForItem(item) : null;
       const itemBillingCycle = normalizeBillingCycleMonths(item?.billingCycleMonths);
       editingId = id || null;
-      sheetTitle.textContent = item ? "明細の詳細" : "明細を追加";
+      sheetTitle.textContent = item ? "カード・引落の詳細" : "カード・引落を追加";
       deleteButton.style.display = item ? "block" : "none";
       clearEntryError();
       renderAccountOptions(item ? item.debitAccount || unassignedAccount : "__custom__");
@@ -4068,7 +4192,7 @@
     function renderPaymentMethodList() {
       paymentMethodList.replaceChildren();
       if (!state.paymentMethods.length) {
-        paymentMethodList.innerHTML = '<div class="empty">支払い方法がありません</div>';
+        paymentMethodList.innerHTML = '<div class="empty">カード・引落がありません</div>';
         return;
       }
       const accountOptionsId = "paymentMethodAccountOptions";
@@ -4077,18 +4201,23 @@
       accountValues().forEach(account => accountOptions.appendChild(new Option(account, account)));
       const table = document.createElement("table");
       table.className = "payment-method-table";
-      table.innerHTML = "<thead><tr><th>支払い方法</th><th>引落口座</th><th>作成日・加入日</th></tr></thead><tbody></tbody>";
+      table.innerHTML = "<thead><tr><th>種別</th><th>カード・引落</th><th>用途</th><th>引落口座</th><th>作成日・加入日</th></tr></thead><tbody></tbody>";
       const body = table.querySelector("tbody");
       state.paymentMethods.slice().sort((a, b) => {
         const rank = orderRank(state.sortOrder.series, a.id) - orderRank(state.sortOrder.series, b.id);
         return rank || a.name.localeCompare(b.name, "ja");
       }).forEach(method => {
         const row = document.createElement("tr");
-        const debitAccount = normalizePaymentMethodDefaults(method.defaults).debitAccount;
+        const defaults = normalizePaymentMethodDefaults(method.defaults);
+        const debitAccount = defaults.debitAccount;
+        const isCard = defaults.paymentType === "card";
+        const lineName = isCard ? defaults.paymentMethod : method.name;
         row.innerHTML = `
-          <td data-label="支払い方法"><input value="${escapeAttr(method.name)}" data-master-field="name" aria-label="支払い方法名"></td>
-          <td data-label="引落口座"><input value="${escapeAttr(debitAccount === unassignedAccount ? "" : debitAccount)}" data-master-field="debitAccount" list="${accountOptionsId}" placeholder="未設定" aria-label="${escapeAttr(method.name)}の引落口座"></td>
-          <td data-label="作成日・加入日"><input value="${escapeAttr(method.startDate)}" data-master-field="startDate" inputmode="numeric" placeholder="YYYY-MM / YYYY-MM-DD" aria-label="${escapeAttr(method.name)}の作成日・加入日"></td>`;
+          <td data-label="種別">${isCard ? "カード" : "直接引落"}</td>
+          <td data-label="カード・引落"><input value="${escapeAttr(lineName)}" data-master-field="${isCard ? "paymentMethod" : "name"}" aria-label="${isCard ? "カード名" : "引落名"}"></td>
+          <td data-label="用途">${isCard ? `<input value="${escapeAttr(method.name)}" data-master-field="name" aria-label="${escapeAttr(lineName)}の用途">` : "—"}</td>
+          <td data-label="引落口座"><input value="${escapeAttr(debitAccount === unassignedAccount ? "" : debitAccount)}" data-master-field="debitAccount" list="${accountOptionsId}" placeholder="未設定" aria-label="${escapeAttr(lineName)}の引落口座"></td>
+          <td data-label="作成日・加入日"><input value="${escapeAttr(method.startDate)}" data-master-field="startDate" inputmode="numeric" placeholder="YYYY-MM / YYYY-MM-DD" aria-label="${escapeAttr(lineName)}の作成日・加入日"></td>`;
         row.querySelectorAll("[data-master-field]").forEach(control => {
           control.addEventListener("change", () => commitPaymentMethodListEdit(method, control));
         });
@@ -4103,15 +4232,21 @@
       paymentMethodsError.textContent = "";
       paymentMethodsError.classList.remove("show");
       control.setAttribute("aria-invalid", "false");
-      if (field === "name" && !value) {
+      if (["name", "paymentMethod"].includes(field) && !value) {
         control.setAttribute("aria-invalid", "true");
-        paymentMethodsError.textContent = "支払い方法名を入力してください。";
+        paymentMethodsError.textContent = field === "paymentMethod" ? "カード名を入力してください。" : "名前を入力してください。";
         paymentMethodsError.classList.add("show");
         return;
       }
-      if (field === "name" && findPaymentMethodByName(value, method.id)) {
+      const defaults = normalizePaymentMethodDefaults(method.defaults);
+      const duplicate = field === "paymentMethod"
+        ? findDuplicatePaymentLine("card", value, method.name, method.id)
+        : field === "name" && defaults.paymentType === "direct"
+          ? findDuplicatePaymentLine("direct", "", value, method.id)
+          : null;
+      if (duplicate) {
         control.setAttribute("aria-invalid", "true");
-        paymentMethodsError.textContent = "同じ名前の支払い方法が既にあります。既存の項目を編集してください。";
+        paymentMethodsError.textContent = "同じカード・引落が既にあります。既存の項目を編集してください。";
         paymentMethodsError.classList.add("show");
         return;
       }
@@ -4124,6 +4259,11 @@
       if (field === "name") {
         method.name = value;
         syncAllPaymentMethodNames(state.paymentMethods, state.months);
+      } else if (field === "paymentMethod") {
+        method.defaults = { ...defaults, paymentMethod: value };
+        state.months.forEach(month => month.items.forEach(item => {
+          if (String(item.seriesId || item.id) === method.id) item.paymentMethod = value;
+        }));
       } else if (field === "debitAccount") {
         const debitAccount = applyDebitAccountChange(method.id, state.activeMonth, value, "all");
         control.value = debitAccount === unassignedAccount ? "" : debitAccount;
@@ -4195,7 +4335,7 @@
       const paymentMethod = paymentType === "card" ? paymentMethodInput.value.trim() : "";
       const content = contentInput.value.trim();
       const paymentStartDate = paymentStartInput.value.trim();
-      const selectedCycleValue = billingCycleInput.value === "custom"
+      const selectedCycleValue = paymentType === "card" ? "1" : billingCycleInput.value === "custom"
         ? customBillingCycleInput.value
         : billingCycleInput.value;
       const existingItem = editingId ? month.items.find(entry => entry.id === editingId) : null;
@@ -4206,13 +4346,7 @@
       }
 
       if (!content) {
-        showEntryError("内容を入力してください。");
-        return;
-      }
-
-      const editingMethodId = existingItem ? String(existingItem.seriesId || existingItem.id) : "";
-      if (findPaymentMethodByName(content, editingMethodId)) {
-        showEntryError("同じ名前の支払い方法が既にあります。既存の項目を編集してください。");
+        showEntryError("名前・用途を入力してください。");
         return;
       }
 
@@ -4223,6 +4357,12 @@
 
       if (paymentType === "card" && !paymentMethod) {
         showEntryError("カード払いの場合はカード名を入力してください。");
+        return;
+      }
+
+      const editingMethodId = existingItem ? String(existingItem.seriesId || existingItem.id) : "";
+      if (findDuplicatePaymentLine(paymentType, paymentMethod, content, editingMethodId)) {
+        showEntryError("同じカード・引落が既にあります。既存の項目を編集してください。");
         return;
       }
 
@@ -4256,7 +4396,7 @@
 
       if (editingId) {
         if (!existingItem) {
-          showEntryError("編集する明細が見つかりません。画面を閉じて再度お試しください。");
+          showEntryError("編集するカード・引落が見つかりません。画面を閉じて再度お試しください。");
           return;
         }
         const accountChanged = normalizeDebitAccountName(existingItem.debitAccount) !== payload.debitAccount;
@@ -4328,6 +4468,12 @@
       method.name = payload.content;
       method.startDate = normalizePaymentStartDate(paymentStartDate);
       method.defaults = paymentMethodDefaultsFromItem(item, monthId);
+      state.months.forEach(month => month.items.forEach(entry => {
+        if (String(entry.seriesId || entry.id) !== seriesId) return;
+        entry.paymentType = payload.paymentType;
+        entry.paymentMethod = payload.paymentType === "card" ? payload.paymentMethod : "";
+        if (payload.paymentType === "card") entry.billingCycleMonths = 1;
+      }));
       if (accountScope === "current") {
         method.defaults.debitAccount = previousDefaults.debitAccount;
       }
@@ -4346,9 +4492,12 @@
       paymentMethodField.hidden = !isCard;
       paymentMethodInput.disabled = !isCard;
       paymentMethodInput.required = isCard;
+      billingCycleField.hidden = isCard;
+      if (isCard) billingCycleInput.value = "1";
       if (!isCard) {
         paymentMethodInput.value = "";
       }
+      syncBillingCycleField();
     }
 
     function syncBillingCycleField() {
@@ -4374,7 +4523,7 @@
       const month = currentMonth();
       const item = month.items.find(entry => entry.id === editingId);
       if (!item) return;
-      const label = paymentMethodName(item);
+      const label = paymentLineDisplayName(item);
       openConfirmation({
         title: `${label}を削除`,
         message: "削除する範囲を選んでください。削除後30日間は「最近削除」から復元できます。",
@@ -4437,7 +4586,7 @@
         id: crypto.randomUUID(),
         kind: "series",
         deletedAt: new Date().toISOString(),
-        label: method?.name || targetItem.content || "支払い方法",
+        label: paymentLineDisplayName(targetItem) || method?.name || "カード・引落",
         scope,
         paymentMethod: method ? structuredClone(method) : null,
         entries: deletedEntries
@@ -4958,6 +5107,16 @@
         currency: "JPY",
         maximumFractionDigits: 0
       }).format(number);
+    }
+
+    function formatOptionalAmount(value) {
+      return String(value ?? "").trim() ? formatAmount(value) : "－";
+    }
+
+    function calculateUnpaidAmount(items) {
+      return items
+        .filter(item => !item.paid)
+        .reduce((sum, item) => sum + toNumber(item.amount), 0);
     }
 
     function escapeHtml(value) {
