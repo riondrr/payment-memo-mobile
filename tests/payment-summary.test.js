@@ -53,8 +53,11 @@ context.items = [
 ];
 assert.equal(vm.runInContext("calculateUnpaidAmount(items)", context), 12500);
 
-assert.match(html, /<span>引落合計<\/span>\s*<strong id="totalAmount">/);
-assert.match(html, /<span>未払い額<\/span>\s*<strong id="unpaidAmount">/);
-assert.doesNotMatch(html, /id="paidCount"/);
+assert.match(
+  html,
+  /<span>引落合計<\/span>\s*<strong id="totalAmount">[\s\S]*?<span>未払い額<\/span>\s*<strong id="unpaidAmount">/
+);
+assert.match(html, /<span>支払い済み<\/span>\s*<strong id="paidCount">0 \/ 0<\/strong>/);
+assert.match(html, /paidCount\.textContent = `\$\{paid\} \/ \$\{visibleItems\.length\}`/);
 
 console.log("payment summary tests passed");
