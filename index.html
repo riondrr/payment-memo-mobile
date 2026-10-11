@@ -221,6 +221,14 @@
       opacity: .4;
     }
 
+    .period-range-label {
+      margin: 7px 2px 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+    }
+
     .primary-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1068,6 +1076,40 @@
       gap: 12px;
     }
 
+    .month-boundary-setting {
+      display: grid;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 12px;
+    }
+
+    .month-boundary-control {
+      display: grid;
+      grid-template-columns: minmax(0, 96px) auto;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .month-boundary-control span {
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .month-boundary-help {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    #monthStartDayInput[aria-invalid="true"] {
+      border-color: var(--rose);
+      box-shadow: 0 0 0 2px rgba(169, 68, 66, .12);
+    }
+
     .primary {
       height: 44px;
       border-radius: 8px;
@@ -1563,6 +1605,7 @@
 
     <section class="toolbar">
       <nav class="month-navigation" id="monthTabs" aria-label="月"></nav>
+      <p class="period-range-label" id="periodRangeLabel" aria-live="polite"></p>
     </section>
 
     <div class="view-toggle" role="tablist" aria-label="表示切替">
@@ -1700,6 +1743,18 @@
       <h2>設定</h2>
       <button class="icon-button" id="closeSettingsSheetButton" type="button" title="閉じる" aria-label="設定を閉じる">×</button>
     </div>
+    <section class="month-boundary-setting" aria-labelledby="monthStartDayLabel">
+      <div class="field">
+        <label id="monthStartDayLabel" for="monthStartDayInput">月の切り替わり日</label>
+        <div class="month-boundary-control">
+          <input id="monthStartDayInput" type="number" inputmode="numeric" min="1" max="31" step="1" value="1" aria-describedby="monthStartDayHelp monthStartDayError">
+          <span>日</span>
+        </div>
+      </div>
+      <p class="month-boundary-help" id="monthStartDayHelp"></p>
+      <p class="form-error" id="monthStartDayError" role="alert"></p>
+      <button class="primary" id="saveMonthStartDayButton" type="button">集計期間に反映</button>
+    </section>
     <button class="secondary" id="paymentMethodsButton" type="button">カード・引落一覧</button>
     <button class="secondary settings-trash-button" id="trashButton" type="button">最近削除</button>
     <button class="danger settings-delete-month-button" id="deleteMonthButton" type="button">表示中の年月を削除</button>
@@ -1761,6 +1816,7 @@
 
     const seed = {
       activeMonth: "2026-05",
+      monthStartDay: 1,
       sortOrder: { accounts: [], paymentSources: [], series: [] },
       paymentMethods: [],
       trash: [],
@@ -1782,13 +1838,14 @@
     };
 
     const storageKey = "notion-payment-notes-v1";
-    const currentSchemaVersion = 14;
+    const currentSchemaVersion = 15;
     const config = window.APP_CONFIG || {};
     const syncTable = config.supabaseStateTable || "user_states";
     let activeStorageKey = storageKey;
     let activeStateSource = "anonymous";
     const state = loadState(activeStorageKey);
     let editingId = null;
+    let editingMonthId = null;
     let reorderMode = false;
     let dragState = null;
     let activeView = "list";
@@ -1809,6 +1866,7 @@
     const list = document.getElementById("entryList");
     const monthlyTableToggle = document.getElementById("monthlyTableToggle");
     const monthlyTableWrap = document.getElementById("monthlyTableWrap");
+    const periodRangeLabel = document.getElementById("periodRangeLabel");
     const totalAmount = document.getElementById("totalAmount");
     const unpaidAmount = document.getElementById("unpaidAmount");
     const paidCount = document.getElementById("paidCount");
@@ -1844,6 +1902,10 @@
     const yearInput = document.getElementById("yearInput");
     const monthInput = document.getElementById("monthInput");
     const monthError = document.getElementById("monthError");
+    const monthStartDayInput = document.getElementById("monthStartDayInput");
+    const monthStartDayHelp = document.getElementById("monthStartDayHelp");
+    const monthStartDayError = document.getElementById("monthStartDayError");
+    const saveMonthStartDayButton = document.getElementById("saveMonthStartDayButton");
     const importInput = document.getElementById("importInput");
     const emailInput = document.getElementById("emailInput");
     const sendOtpButton = document.getElementById("sendOtpButton");
@@ -1902,6 +1964,13 @@
     debitAccountInput.addEventListener("change", syncDebitAccountField);
     billingCycleInput.addEventListener("change", syncBillingCycleField);
     monthlyTableToggle.addEventListener("click", toggleMonthlyTable);
+    saveMonthStartDayButton.addEventListener("click", saveMonthStartDay);
+    monthStartDayInput.addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        saveMonthStartDay();
+      }
+    });
     sendOtpButton.addEventListener("click", sendEmailOtp);
     verifyOtpButton.addEventListener("click", verifyEmailOtp);
     emailInput.addEventListener("input", updateCloudSyncControls);
@@ -1961,6 +2030,7 @@
     }
 
     function persist(options = {}) {
+      state.monthStartDay = normalizeMonthStartDay(state.monthStartDay);
       state.paymentMethods = normalizePaymentMethods(state.paymentMethods, state.months);
       syncAllPaymentMethodNames(state.paymentMethods, state.months);
       state.trash = normalizeTrash(state.trash);
@@ -1978,6 +2048,7 @@
     function normalizeState(value) {
       const normalized = value && typeof value === "object" ? value : structuredClone(seed);
       const sourceSchemaVersion = Number(normalized.schemaVersion || 0);
+      normalized.monthStartDay = normalizeMonthStartDay(normalized.monthStartDay);
       normalized.months = Array.isArray(normalized.months) && normalized.months.length
         ? normalized.months.map(month => normalizeMonth(month, sourceSchemaVersion >= 13))
         : structuredClone(seed.months).map(month => normalizeMonth(month, sourceSchemaVersion >= 13));
@@ -2747,6 +2818,11 @@
       return Number.isInteger(number) && number >= 1 && number <= 31 ? number : null;
     }
 
+    function normalizeMonthStartDay(value) {
+      const number = Number(value);
+      return Number.isInteger(number) && number >= 1 && number <= 31 ? number : 1;
+    }
+
     function normalizeDateValue(value) {
       const candidate = String(value || "").trim();
       const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(candidate);
@@ -2994,6 +3070,28 @@
       return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
     }
 
+    function monthPeriodRange(monthId, startDayValue = 1) {
+      if (!/^\d{4}-\d{2}$/.test(String(monthId || ""))) return null;
+      const startDay = normalizeMonthStartDay(startDayValue);
+      const startMonthId = startDay === 1 ? monthId : offsetMonthId(monthId, -1);
+      const nextStartMonthId = startDay === 1 ? offsetMonthId(monthId, 1) : monthId;
+      const start = dateFromMonthAndDay(startMonthId, startDay);
+      const nextStart = dateFromMonthAndDay(nextStartMonthId, startDay);
+      if (!start || !nextStart) return null;
+      return { start, end: addDaysToDate(nextStart, -1) };
+    }
+
+    function isDateInMonthPeriod(value, monthId, startDayValue = 1) {
+      const date = normalizeDateValue(value);
+      const range = monthPeriodRange(monthId, startDayValue);
+      return Boolean(date && range && date >= range.start && date <= range.end);
+    }
+
+    function monthPeriodLabel(monthId, startDayValue = 1) {
+      const range = monthPeriodRange(monthId, startDayValue);
+      return range ? `${formatDateLabel(range.start)}〜${formatDateLabel(range.end)}` : "";
+    }
+
     function fullMonthRange(monthId) {
       if (!/^\d{4}-\d{2}$/.test(String(monthId || ""))) return null;
       const [year, month] = monthId.split("-").map(Number);
@@ -3123,10 +3221,45 @@
       return state.months.find(month => month.id === state.activeMonth) || state.months[0];
     }
 
+    function entriesForMonthPeriod(monthId) {
+      const range = monthPeriodRange(monthId, state.monthStartDay);
+      if (!range) return [];
+      const entries = [];
+      const datedSeries = new Set();
+
+      state.months.forEach(sourceMonth => {
+        visibleItemsForMonth(sourceMonth).forEach(item => {
+          const debitDate = normalizeDateValue(item.debitDate) || dateFromMonthAndDay(sourceMonth.id, item.debitDay);
+          if (!debitDate || debitDate < range.start || debitDate > range.end) return;
+          entries.push({ sourceMonth, item, debitDate });
+          datedSeries.add(String(item.seriesId || item.id));
+        });
+      });
+
+      const fallbackMonth = state.months.find(month => month.id === monthId);
+      if (fallbackMonth) {
+        visibleItemsForMonth(fallbackMonth).forEach(item => {
+          const debitDate = normalizeDateValue(item.debitDate) || dateFromMonthAndDay(fallbackMonth.id, item.debitDay);
+          const seriesId = String(item.seriesId || item.id);
+          if (!debitDate && !datedSeries.has(seriesId)) {
+            entries.push({ sourceMonth: fallbackMonth, item, debitDate: "" });
+          }
+        });
+      }
+      return entries;
+    }
+
+    function monthContainingItem(itemId, preferredMonthId = "") {
+      const preferred = state.months.find(month => month.id === preferredMonthId);
+      if (preferred?.items.some(item => item.id === itemId)) return preferred;
+      return state.months.find(month => month.items.some(item => item.id === itemId)) || null;
+    }
+
     function render() {
       state.trash = normalizeTrash(state.trash);
       state.sortOrder = normalizeSortOrder(state.sortOrder, state.months, state.trash, state.paymentMethods);
       renderTabs();
+      renderPeriodRange();
       renderAccountSuggestions();
       renderMonthlyTable();
       renderEntries();
@@ -3141,6 +3274,12 @@
     function renderSettingsActions() {
       const month = currentMonth();
       const isLastMonth = state.months.length <= 1;
+      const startDay = normalizeMonthStartDay(state.monthStartDay);
+      monthStartDayInput.value = String(startDay);
+      monthStartDayInput.setAttribute("aria-invalid", "false");
+      monthStartDayHelp.textContent = month
+        ? `${month.label}分は ${monthPeriodLabel(month.id, startDay)} で集計します。存在しない日は月末に切り替わります。`
+        : "1〜31の数字で設定できます。";
       deleteMonthButton.textContent = month
         ? isLastMonth
           ? `${month.label}は削除できません（最後の年月）`
@@ -3148,6 +3287,30 @@
         : "表示中の年月を削除";
       deleteMonthButton.disabled = isLastMonth;
       deleteMonthButton.title = isLastMonth ? "最後の1か月は削除できません" : "";
+    }
+
+    function renderPeriodRange() {
+      const month = currentMonth();
+      periodRangeLabel.textContent = month
+        ? `集計期間 ${monthPeriodLabel(month.id, state.monthStartDay)}`
+        : "";
+    }
+
+    function saveMonthStartDay() {
+      const value = Number(monthStartDayInput.value);
+      const isValid = Number.isInteger(value) && value >= 1 && value <= 31;
+      if (!isValid) {
+        monthStartDayInput.setAttribute("aria-invalid", "true");
+        monthStartDayError.textContent = "月の切り替わり日は1〜31の整数で入力してください。";
+        monthStartDayError.classList.add("show");
+        return;
+      }
+      monthStartDayError.textContent = "";
+      monthStartDayError.classList.remove("show");
+      monthStartDayInput.setAttribute("aria-invalid", "false");
+      state.monthStartDay = value;
+      persist();
+      render();
     }
 
     function setActiveView(view) {
@@ -3170,21 +3333,25 @@
     function calendarEvents(monthId) {
       const eventsByDate = new Map();
       const addEvent = (date, sourceMonth, item) => {
-        if (!date || !date.startsWith(`${monthId}-`)) return;
+        if (!date) return;
         if (!eventsByDate.has(date)) eventsByDate.set(date, []);
         eventsByDate.get(date).push({ sourceMonth, item });
       };
-      state.months.forEach(sourceMonth => visibleItemsForMonth(sourceMonth).forEach(item => {
-        addEvent(normalizeDateValue(item.debitDate), sourceMonth, item);
-      }));
+      entriesForMonthPeriod(monthId).forEach(entry => {
+        addEvent(entry.debitDate, entry.sourceMonth, entry.item);
+      });
       return eventsByDate;
     }
 
     function renderCalendar() {
       const monthId = currentMonth().id;
-      const [year, month] = monthId.split("-").map(Number);
-      const firstWeekday = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
-      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      const range = monthPeriodRange(monthId, state.monthStartDay);
+      if (!range) {
+        calendarView.replaceChildren();
+        return;
+      }
+      const [startYear, startMonth, startDay] = range.start.split("-").map(Number);
+      const firstWeekday = new Date(Date.UTC(startYear, startMonth - 1, startDay)).getUTCDay();
       const today = localDateValue(new Date());
       const events = calendarEvents(monthId);
       calendarView.innerHTML = `
@@ -3198,8 +3365,8 @@
         blank.className = "calendar-day outside";
         grid.appendChild(blank);
       }
-      for (let day = 1; day <= lastDay; day += 1) {
-        const date = `${monthId}-${String(day).padStart(2, "0")}`;
+      for (let date = range.start; date <= range.end; date = addDaysToDate(date, 1)) {
+        const [, calendarMonth, calendarDay] = date.split("-").map(Number);
         const dayEvents = events.get(date) || [];
         const button = document.createElement("button");
         button.type = "button";
@@ -3210,7 +3377,8 @@
           const suffix = event.item.paid ? " 支払い済み" : " 予定";
           return `<span class="calendar-event ${eventClass}">${escapeHtml(paymentLineDisplayName(event.item))}${suffix}</span>`;
         }).join("");
-        button.innerHTML = `<span class="calendar-date-number">${day}</span>${eventMarkup}${dayEvents.length > 3 ? `<span class="calendar-event">ほか${dayEvents.length - 3}件</span>` : ""}`;
+        const dayLabel = date === range.start || calendarDay === 1 ? `${calendarMonth}/${calendarDay}` : String(calendarDay);
+        button.innerHTML = `<span class="calendar-date-number">${dayLabel}</span>${eventMarkup}${dayEvents.length > 3 ? `<span class="calendar-event">ほか${dayEvents.length - 3}件</span>` : ""}`;
         button.addEventListener("click", () => openDaySheet(date));
         grid.appendChild(button);
       }
@@ -3241,7 +3409,7 @@
     }
 
     function renderDayDetails(date) {
-      const events = calendarEvents(date.slice(0, 7)).get(date) || [];
+      const events = calendarEvents(currentMonth().id).get(date) || [];
       dayDetailList.innerHTML = "";
       if (!events.length) {
         dayDetailList.innerHTML = '<div class="empty">この日の引落予定はありません</div>';
@@ -3391,7 +3559,7 @@
 
     function renderMonthlyTable() {
       const month = currentMonth();
-      const visibleItems = visibleItemsForMonth(month);
+      const visibleItems = entriesForMonthPeriod(month.id).map(entry => entry.item);
       const isExpanded = expandedMonthlyTables.has(month.id);
       monthlyTableToggle.setAttribute("aria-expanded", String(isExpanded));
       monthlyTableWrap.hidden = !isExpanded;
@@ -3472,7 +3640,10 @@
     function renderEntries() {
       const month = currentMonth();
       const query = searchInput.value.trim().toLowerCase();
-      const items = orderedItems(visibleItemsForMonth(month)).filter(item => matchesQuery(item, query, month.id));
+      const periodEntries = entriesForMonthPeriod(month.id)
+        .filter(entry => matchesQuery(entry.item, query, entry.sourceMonth.id));
+      const sourceMonths = new Map(periodEntries.map(entry => [entry.item.id, entry.sourceMonth.id]));
+      const items = orderedItems(periodEntries.map(entry => entry.item));
       const accountGroups = groupItemsByDebitAccount(items);
 
       list.innerHTML = "";
@@ -3514,7 +3685,9 @@
         `;
 
         const accountItems = section.querySelector(".account-items");
-        orderedItems(group.items).forEach(item => accountItems.appendChild(renderEntryCard(item, month.id)));
+        orderedItems(group.items).forEach(item => {
+          accountItems.appendChild(renderEntryCard(item, sourceMonths.get(item.id) || month.id));
+        });
         bindDragHandle(section.querySelector(".account-drag-handle"), "account", group.account, group.account, section);
         section.querySelector(".account-toggle").addEventListener("click", event => {
           const collapsed = !accountItems.hidden;
@@ -3606,7 +3779,7 @@
         item.debitAccount || unassignedAccount,
         article
       );
-      article.querySelector(".entry-edit").addEventListener("click", () => openSheet(item.id));
+      article.querySelector(".entry-edit").addEventListener("click", () => openSheet(item.id, monthId));
       article.querySelector("[data-action='previous-period-start']").addEventListener("click", () => {
         const range = previousUsagePeriodRange(item, monthId);
         if (!range) return;
@@ -3845,7 +4018,7 @@
 
     function renderSummary() {
       const month = currentMonth();
-      const visibleItems = visibleItemsForMonth(month);
+      const visibleItems = entriesForMonthPeriod(month.id).map(entry => entry.item);
       const sum = visibleItems.reduce((acc, item) => acc + toNumber(item.amount), 0);
       const paid = visibleItems.filter(item => item.paid).length;
       totalAmount.textContent = formatAmount(sum);
@@ -4149,11 +4322,13 @@
       return true;
     }
 
-    function openSheet(id) {
-      const item = id ? currentMonth().items.find(entry => entry.id === id) : null;
+    function openSheet(id, sourceMonthId = state.activeMonth) {
+      const sourceMonth = id ? monthContainingItem(id, sourceMonthId) : currentMonth();
+      const item = id ? sourceMonth?.items.find(entry => entry.id === id) : null;
       const method = item ? paymentMethodForItem(item) : null;
       const itemBillingCycle = normalizeBillingCycleMonths(item?.billingCycleMonths);
       editingId = id || null;
+      editingMonthId = sourceMonth?.id || state.activeMonth;
       sheetTitle.textContent = item ? "カード・引落の詳細" : "カード・引落を追加";
       deleteButton.style.display = item ? "block" : "none";
       clearEntryError();
@@ -4180,6 +4355,8 @@
     }
 
     function openSettingsSheet() {
+      monthStartDayError.textContent = "";
+      monthStartDayError.classList.remove("show");
       renderSettingsActions();
       settingsSheet.classList.add("open");
       scrim.classList.add("open");
@@ -4302,6 +4479,7 @@
       form.reset();
       clearEntryError();
       editingId = null;
+      editingMonthId = null;
     }
 
     function openConfirmation({ title, message, actions }) {
@@ -4342,7 +4520,7 @@
 
     function saveEntry(event) {
       event.preventDefault();
-      const month = currentMonth();
+      const month = state.months.find(value => value.id === editingMonthId) || currentMonth();
       const paymentType = normalizePaymentType(paymentTypeInput.value);
       const debitAccount = debitAccountInput.value === "__custom__"
         ? customDebitAccountInput.value.trim()
@@ -4535,7 +4713,8 @@
 
     function deleteEntry() {
       if (!editingId) return;
-      const month = currentMonth();
+      const month = monthContainingItem(editingId, editingMonthId);
+      if (!month) return;
       const item = month.items.find(entry => entry.id === editingId);
       if (!item) return;
       const label = paymentLineDisplayName(item);
@@ -4546,30 +4725,30 @@
           {
             label: "この月",
             className: "danger",
-            handler: () => deleteEntryByRange(item, "current")
+            handler: () => deleteEntryByRange(item, "current", month.id)
           },
           {
             label: "これ以降",
             className: "danger",
-            handler: () => deleteEntryByRange(item, "after")
+            handler: () => deleteEntryByRange(item, "after", month.id)
           },
           {
             label: "これ以前",
             className: "danger",
-            handler: () => deleteEntryByRange(item, "before")
+            handler: () => deleteEntryByRange(item, "before", month.id)
           },
           {
             label: "すべて",
             className: "danger",
-            handler: () => deleteEntryByRange(item, "all")
+            handler: () => deleteEntryByRange(item, "all", month.id)
           }
         ]
       });
     }
 
-    function deleteEntryByRange(targetItem, scope) {
+    function deleteEntryByRange(targetItem, scope, baseMonthId = state.activeMonth) {
       const seriesId = String(targetItem.seriesId || targetItem.id);
-      const activeMonthId = currentMonth().id;
+      const activeMonthId = baseMonthId;
       const method = paymentMethodForItem(targetItem);
       const deletedEntries = [];
       state.months.forEach(month => {
