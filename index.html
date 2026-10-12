@@ -838,6 +838,7 @@
     .entry-field-debit .debit-date-control {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 6px;
       min-width: 0;
     }
@@ -846,6 +847,22 @@
       flex: 0 0 52px;
       width: 52px;
       text-align: left;
+    }
+
+    .entry-fields .entry-field-debit .debit-date-control input[data-field="debitDateOverride"] {
+      flex-basis: 76px;
+      width: 76px;
+    }
+
+    .debit-period-preview {
+      flex: 1 0 100%;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .debit-period-preview.invalid {
+      color: var(--danger);
     }
 
     .entry-field-debit .inline-action {
@@ -1838,7 +1855,7 @@
     };
 
     const storageKey = "notion-payment-notes-v1";
-    const currentSchemaVersion = 15;
+    const currentSchemaVersion = 16;
     const config = window.APP_CONFIG || {};
     const syncTable = config.supabaseStateTable || "user_states";
     let activeStorageKey = storageKey;
@@ -2493,7 +2510,9 @@
         debitAccount: item.debitAccount,
         paymentType: item.paymentType,
         paymentMethod: item.paymentMethod,
-        debitDay: dayFromDate(item.debitDate) || item.debitDay,
+        debitDay: item.debitDateOverride
+          ? item.debitDay
+          : dayFromDate(item.debitDate) || item.debitDay,
         billingCycleMonths: item.billingCycleMonths,
         billingStartMonth: normalizeBillingStartMonth(item.billingStartMonth, monthId)
       });
@@ -2686,6 +2705,7 @@
     }
 
     function mergeDuplicateItem(target, duplicate) {
+      const targetHadDebitDate = Boolean(normalizeDateValue(target.debitDate));
       [
         "debitAccount", "paymentMethod", "content", "amount", "usedDate", "debitDate",
         "debitDay", "billingStartMonth", "usagePeriodStart", "usagePeriodEnd", "paidDate", "note"
@@ -2695,6 +2715,11 @@
           target[field] = duplicate[field];
         }
       });
+      if (!targetHadDebitDate && normalizeDateValue(duplicate.debitDate)) {
+        target.debitDateOverride = Boolean(duplicate.debitDateOverride);
+      } else {
+        target.debitDateOverride = Boolean(target.debitDateOverride);
+      }
       target.paid = Boolean(target.paid || duplicate.paid);
       return target;
     }
@@ -2752,7 +2777,10 @@
       const billingCycleMonths = normalizeBillingCycleMonths(item?.billingCycleMonths);
       const billingStartMonth = normalizeBillingStartMonth(item?.billingStartMonth, monthId);
       const debitDate = normalizeDebitDate(item, monthId);
-      const debitDay = dayFromDate(debitDate) || normalizeDebitDay(item?.debitDay);
+      const debitDateOverride = Boolean(item?.debitDateOverride && debitDate);
+      const debitDay = debitDateOverride
+        ? normalizeDebitDay(item?.debitDay) || dayFromDate(debitDate)
+        : dayFromDate(debitDate) || normalizeDebitDay(item?.debitDay);
       const usedDate = normalizeDateValue(item?.usedDate);
       const usagePeriodStart = normalizeDateValue(item?.usagePeriodStart);
       const usagePeriodEnd = normalizeDateValue(item?.usagePeriodEnd);
@@ -2775,6 +2803,7 @@
           usedDate,
           debitDate,
           debitDay,
+          debitDateOverride,
           billingCycleMonths,
           billingStartMonth,
           usagePeriodStart,
@@ -2798,6 +2827,7 @@
         usedDate,
         debitDate,
         debitDay,
+        debitDateOverride,
         billingCycleMonths,
         billingStartMonth,
         usagePeriodStart,
@@ -2944,6 +2974,46 @@
       return { month, day };
     }
 
+    function debitDateFromMonthDay(value, monthId) {
+      const parsed = parseMonthDayInput(value);
+      if (!parsed) return null;
+      if (parsed.empty) return "";
+      if (parsed.date) return parsed.date;
+
+      const match = /^(\d{4})-(\d{2})$/.exec(String(monthId || ""));
+      if (!match) return null;
+      const sourceIndex = Number(match[1]) * 12 + Number(match[2]) - 1;
+      const candidates = [Number(match[1]) - 1, Number(match[1]), Number(match[1]) + 1]
+        .map(year => dateFromParts(year, parsed.month, parsed.day))
+        .filter(Boolean)
+        .sort((a, b) => {
+          const aIndex = Number(a.slice(0, 4)) * 12 + Number(a.slice(5, 7)) - 1;
+          const bIndex = Number(b.slice(0, 4)) * 12 + Number(b.slice(5, 7)) - 1;
+          return Math.abs(aIndex - sourceIndex) - Math.abs(bIndex - sourceIndex) || a.localeCompare(b);
+        });
+      return candidates[0] || null;
+    }
+
+    function monthIdForDebitDate(value, startDayValue = 1) {
+      const date = normalizeDateValue(value);
+      if (!date) return "";
+      const calendarMonthId = date.slice(0, 7);
+      for (const offset of [-1, 0, 1, 2]) {
+        const candidate = offsetMonthId(calendarMonthId, offset);
+        if (isDateInMonthPeriod(date, candidate, startDayValue)) return candidate;
+      }
+      return "";
+    }
+
+    function debitMonthPreviewLabel(value, startDayValue = 1, sourceMonthId = "") {
+      const targetMonthId = monthIdForDebitDate(value, startDayValue);
+      if (!targetMonthId) return "引落日を入力すると表示月が表示されます";
+      const [year, month] = targetMonthId.split("-");
+      const sourceYear = String(sourceMonthId || "").slice(0, 4);
+      const displayMonth = sourceYear && sourceYear !== year ? `${year}年${Number(month)}月` : `${Number(month)}月`;
+      return `この明細は${displayMonth}分に表示されます`;
+    }
+
     function dateFromParts(year, month, day) {
       const date = new Date(Date.UTC(year, month - 1, day));
       const isValid = date.getUTCFullYear() === year &&
@@ -3022,7 +3092,9 @@
 
     function previousDebitDate(item, monthId) {
       const previous = previousSeriesItem(item, monthId);
-      const day = dayFromDate(previous?.debitDate) || normalizeDebitDay(previous?.debitDay);
+      const day = previous?.debitDateOverride
+        ? normalizeDebitDay(previous?.debitDay)
+        : dayFromDate(previous?.debitDate) || normalizeDebitDay(previous?.debitDay);
       return day ? dateFromMonthAndDay(monthId, day) : "";
     }
 
@@ -3123,7 +3195,9 @@
 
     function copyItemForMonth(item, targetMonthId, sourceMonthId = "") {
       const cycle = normalizeBillingCycleMonths(item.billingCycleMonths);
-      const debitDay = dayFromDate(item.debitDate) || normalizeDebitDay(item.debitDay);
+      const debitDay = item.debitDateOverride
+        ? normalizeDebitDay(item.debitDay)
+        : dayFromDate(item.debitDate) || normalizeDebitDay(item.debitDay);
       const sourceFullRange = sourceMonthId ? fullCycleRange(sourceMonthId, cycle) : null;
       const targetFullRange = fullCycleRange(targetMonthId, cycle);
       const usedFullRange = sourceFullRange &&
@@ -3139,6 +3213,7 @@
         usedDate: "",
         debitDate: dateFromMonthAndDay(targetMonthId, debitDay),
         debitDay,
+        debitDateOverride: false,
         billingCycleMonths: cycle,
         billingStartMonth: normalizeBillingStartMonth(item.billingStartMonth, targetMonthId),
         usagePeriodStart: usedFullRange ? targetFullRange.start : addDaysToDate(item.usagePeriodEnd, 1),
@@ -3709,7 +3784,9 @@
       const purposeName = paymentLinePurposeName(item);
       const billingCycleMonths = normalizeBillingCycleMonths(item.billingCycleMonths);
       const debitDate = item.debitDate || dateFromMonthAndDay(monthId, item.debitDay);
-      const debitDayLabel = formatDebitDayLabel(debitDate);
+      const debitDateOverride = Boolean(item.debitDateOverride);
+      const debitInputLabel = debitDateOverride ? formatMonthDayLabel(debitDate) : formatDebitDayLabel(debitDate);
+      const debitPreview = debitMonthPreviewLabel(debitDate, state.monthStartDay, monthId);
       const usagePeriodStartLabel = formatMonthDayLabel(item.usagePeriodStart);
       const usagePeriodEndLabel = formatMonthDayLabel(item.usagePeriodEnd);
       const previousPeriodRange = previousUsagePeriodRange(item, monthId);
@@ -3754,10 +3831,12 @@
             <div class="field entry-field-debit">
               <div class="entry-field-label-row">
                 <label>引落とし日</label>
+                <button class="inline-action" type="button" data-action="toggle-debit-date-override">${debitDateOverride ? "日だけの指定に戻す" : "今回だけ月日を指定"}</button>
               </div>
               <div class="debit-date-control">
-                <input inputmode="numeric" maxlength="2" pattern="[0-9]*" value="${escapeAttr(debitDayLabel)}" data-field="debitDate">
+                <input inputmode="numeric" maxlength="${debitDateOverride ? "5" : "2"}" ${debitDateOverride ? 'placeholder="月/日" data-month-day' : 'pattern="[0-9]*"'} value="${escapeAttr(debitInputLabel)}" data-field="${debitDateOverride ? "debitDateOverride" : "debitDate"}" aria-label="${debitDateOverride ? "今回だけの引落月日" : "通常の引落日"}">
                 <button class="inline-action" type="button" data-action="previous-debit-date" title="前回の引落日を反映" ${inheritedDebitDate ? "" : "disabled"}>前回と同じ日</button>
+                <div class="debit-period-preview" aria-live="polite">${escapeHtml(debitPreview)}</div>
               </div>
             </div>
             <div class="field entry-field-note">
@@ -3793,6 +3872,17 @@
         if (!date) return;
         item.debitDate = date;
         item.debitDay = dayFromDate(date);
+        item.debitDateOverride = false;
+        persist();
+        render();
+      });
+      article.querySelector("[data-action='toggle-debit-date-override']").addEventListener("click", () => {
+        item.debitDateOverride = !item.debitDateOverride;
+        if (item.debitDateOverride) {
+          item.debitDate = item.debitDate || dateFromMonthAndDay(monthId, item.debitDay);
+        } else {
+          item.debitDate = dateFromMonthAndDay(monthId, item.debitDay);
+        }
         persist();
         render();
       });
@@ -3818,6 +3908,18 @@
         }
         if (control.hasAttribute("data-month-day")) {
           control.addEventListener("input", formatMonthDayControl);
+        }
+        if (control.dataset.field === "debitDate" || control.dataset.field === "debitDateOverride") {
+          control.addEventListener("input", () => {
+            const preview = article.querySelector(".debit-period-preview");
+            const date = control.dataset.field === "debitDateOverride"
+              ? debitDateFromMonthDay(control.value, monthId)
+              : dateFromMonthAndDay(monthId, normalizeDebitDay(control.value));
+            preview.textContent = date === null
+              ? "月日を正しく入力してください"
+              : debitMonthPreviewLabel(date, state.monthStartDay, monthId);
+            preview.classList.toggle("invalid", date === null);
+          });
         }
       });
       return article;
@@ -3855,6 +3957,14 @@
         if (text && debitDay === null) return;
         item.debitDay = debitDay;
         item.debitDate = debitDay ? dateFromMonthAndDay(monthId, debitDay) : "";
+        item.debitDateOverride = false;
+        return;
+      }
+      if (field === "debitDateOverride") {
+        const debitDate = debitDateFromMonthDay(text, monthId);
+        if (debitDate === null) return;
+        item.debitDate = debitDate;
+        item.debitDateOverride = Boolean(debitDate);
         return;
       }
       if (field === "amount") {
@@ -4579,6 +4689,7 @@
         usedDate: existingItem?.usedDate || "",
         debitDate: existingItem?.debitDate || "",
         debitDay: existingItem?.debitDay || null,
+        debitDateOverride: Boolean(existingItem?.debitDateOverride),
         billingCycleMonths,
         billingStartMonth,
         usagePeriodStart: existingItem?.usagePeriodStart || "",
